@@ -1,0 +1,9 @@
+Generate a dataset for Subject-Verb Agreement with a Prepositional Phrase distractor.
+**Goal:** Test basic subject-verb agreement with a simple prepositional phrase distractor.
+**Prediction Target:** The correct verb form.
+**Method:** 
+1. The `clean` prompt has a singular subject and a plural distractor.
+2. The `corrupted` prompt has a plural subject and a singular distractor.
+3. The sentence must stop right before the verb slot.
+**Columns:** `clean`, `corrupted`, `clean_word`, `corrupted_word`.
+**Separator:** Pipe '|'.

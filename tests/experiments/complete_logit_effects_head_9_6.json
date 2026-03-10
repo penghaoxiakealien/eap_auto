@@ -1,0 +1,1860 @@
+[
+  {
+    "sentence_id": "sentence_0",
+    "sentence_text": "At the zoo, Rachel and Marcus watched the lions. Rachel handed a map to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "At",
+      " the",
+      " zoo",
+      ",",
+      " Rachel",
+      " and",
+      " Marcus",
+      " watched",
+      " the",
+      " lions",
+      ".",
+      " Rachel",
+      " handed",
+      " a",
+      " map",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        " and"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.6306467056274414,
+      "corrupted_logit_diff": -0.5196123123168945,
+      "patched_logit_diff": -0.6249504089355469,
+      "ioi_metric": 0.9486979077197925,
+      "io_token": "Marcus",
+      "s_token": "Rachel",
+      "io_logit_change": 0.0031614303588867188,
+      "s_logit_change": -0.0025348663330078125
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 2953,
+        "clean_logit": 14.554495811462402,
+        "patched_logit": 14.554040908813477,
+        "logit_change": -0.00045490264892578125
+      },
+      {
+        "position": 1,
+        "token": "At",
+        "token_id": 262,
+        "clean_logit": 5.063031196594238,
+        "patched_logit": 5.06263542175293,
+        "logit_change": -0.00039577484130859375
+      },
+      {
+        "position": 2,
+        "token": " the",
+        "token_id": 26626,
+        "clean_logit": -3.679180383682251,
+        "patched_logit": -3.67991304397583,
+        "logit_change": -0.0007326602935791016
+      },
+      {
+        "position": 3,
+        "token": " zoo",
+        "token_id": 11,
+        "clean_logit": 9.321431159973145,
+        "patched_logit": 9.320815086364746,
+        "logit_change": -0.0006160736083984375
+      },
+      {
+        "position": 4,
+        "token": ",",
+        "token_id": 15984,
+        "clean_logit": -0.08993041515350342,
+        "patched_logit": -0.09278523921966553,
+        "logit_change": -0.0028548240661621094
+      },
+      {
+        "position": 5,
+        "token": " Rachel",
+        "token_id": 290,
+        "clean_logit": 7.289875507354736,
+        "patched_logit": 7.289462566375732,
+        "logit_change": -0.00041294097900390625
+      },
+      {
+        "position": 6,
+        "token": " and",
+        "token_id": 17068,
+        "clean_logit": -0.356323778629303,
+        "patched_logit": -0.3538393974304199,
+        "logit_change": 0.0024843811988830566
+      },
+      {
+        "position": 7,
+        "token": " Marcus",
+        "token_id": 7342,
+        "clean_logit": -1.7180614471435547,
+        "patched_logit": -1.7178523540496826,
+        "logit_change": 0.0002090930938720703
+      },
+      {
+        "position": 8,
+        "token": " watched",
+        "token_id": 262,
+        "clean_logit": 5.063031196594238,
+        "patched_logit": 5.06263542175293,
+        "logit_change": -0.00039577484130859375
+      },
+      {
+        "position": 9,
+        "token": " the",
+        "token_id": 31420,
+        "clean_logit": -2.633226156234741,
+        "patched_logit": -2.633056402206421,
+        "logit_change": 0.0001697540283203125
+      },
+      {
+        "position": 10,
+        "token": " lions",
+        "token_id": 13,
+        "clean_logit": 11.226181030273438,
+        "patched_logit": 11.225666999816895,
+        "logit_change": -0.0005140304565429688
+      },
+      {
+        "position": 11,
+        "token": ".",
+        "token_id": 15984,
+        "clean_logit": -0.08993041515350342,
+        "patched_logit": -0.09278523921966553,
+        "logit_change": -0.0028548240661621094
+      },
+      {
+        "position": 12,
+        "token": " Rachel",
+        "token_id": 10158,
+        "clean_logit": -2.8248167037963867,
+        "patched_logit": -2.8245959281921387,
+        "logit_change": 0.00022077560424804688
+      },
+      {
+        "position": 13,
+        "token": " handed",
+        "token_id": 257,
+        "clean_logit": 5.030647277832031,
+        "patched_logit": 5.030295372009277,
+        "logit_change": -0.00035190582275390625
+      },
+      {
+        "position": 14,
+        "token": " a",
+        "token_id": 3975,
+        "clean_logit": -0.3434751033782959,
+        "patched_logit": -0.3441650867462158,
+        "logit_change": -0.0006899833679199219
+      },
+      {
+        "position": 15,
+        "token": " map",
+        "token_id": 284,
+        "clean_logit": 5.573802947998047,
+        "patched_logit": 5.573606014251709,
+        "logit_change": -0.00019693374633789062
+      },
+      {
+        "position": 16,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 6.88240909576416,
+        "patched_logit": 6.881988525390625,
+        "logit_change": -0.00042057037353515625
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_1",
+    "sentence_text": "After the lecture, Victoria and Eric discussed the topic. Victoria handed her notes to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "After",
+      " the",
+      " lecture",
+      ",",
+      " Victoria",
+      " and",
+      " Eric",
+      " discussed",
+      " the",
+      " topic",
+      ".",
+      " Victoria",
+      " handed",
+      " her",
+      " notes",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        " and"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 1.007939338684082,
+      "corrupted_logit_diff": 1.1046104431152344,
+      "patched_logit_diff": 1.0116033554077148,
+      "ioi_metric": 0.9620981187171367,
+      "io_token": "Eric",
+      "s_token": "Victoria",
+      "io_logit_change": 0.0015020370483398438,
+      "s_logit_change": -0.0021619796752929688
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 3260,
+        "clean_logit": 14.725412368774414,
+        "patched_logit": 14.72556209564209,
+        "logit_change": 0.00014972686767578125
+      },
+      {
+        "position": 1,
+        "token": "After",
+        "token_id": 262,
+        "clean_logit": 5.132803440093994,
+        "patched_logit": 5.132571220397949,
+        "logit_change": -0.00023221969604492188
+      },
+      {
+        "position": 2,
+        "token": " the",
+        "token_id": 19143,
+        "clean_logit": -2.9969964027404785,
+        "patched_logit": -2.99702525138855,
+        "logit_change": -2.8848648071289062e-05
+      },
+      {
+        "position": 3,
+        "token": " lecture",
+        "token_id": 11,
+        "clean_logit": 9.291955947875977,
+        "patched_logit": 9.292165756225586,
+        "logit_change": 0.000209808349609375
+      },
+      {
+        "position": 4,
+        "token": ",",
+        "token_id": 12313,
+        "clean_logit": 0.20456278324127197,
+        "patched_logit": 0.20235025882720947,
+        "logit_change": -0.0022125244140625
+      },
+      {
+        "position": 5,
+        "token": " Victoria",
+        "token_id": 290,
+        "clean_logit": 7.2279372215271,
+        "patched_logit": 7.227950096130371,
+        "logit_change": 1.2874603271484375e-05
+      },
+      {
+        "position": 6,
+        "token": " and",
+        "token_id": 7651,
+        "clean_logit": 0.7137653231620789,
+        "patched_logit": 0.7148004770278931,
+        "logit_change": 0.001035153865814209
+      },
+      {
+        "position": 7,
+        "token": " Eric",
+        "token_id": 6693,
+        "clean_logit": -1.1829378604888916,
+        "patched_logit": -1.1834280490875244,
+        "logit_change": -0.0004901885986328125
+      },
+      {
+        "position": 8,
+        "token": " discussed",
+        "token_id": 262,
+        "clean_logit": 5.132803440093994,
+        "patched_logit": 5.132571220397949,
+        "logit_change": -0.00023221969604492188
+      },
+      {
+        "position": 9,
+        "token": " the",
+        "token_id": 7243,
+        "clean_logit": -1.953765869140625,
+        "patched_logit": -1.9535987377166748,
+        "logit_change": 0.0001671314239501953
+      },
+      {
+        "position": 10,
+        "token": " topic",
+        "token_id": 13,
+        "clean_logit": 11.025188446044922,
+        "patched_logit": 11.025472640991211,
+        "logit_change": 0.0002841949462890625
+      },
+      {
+        "position": 11,
+        "token": ".",
+        "token_id": 12313,
+        "clean_logit": 0.20456278324127197,
+        "patched_logit": 0.20235025882720947,
+        "logit_change": -0.0022125244140625
+      },
+      {
+        "position": 12,
+        "token": " Victoria",
+        "token_id": 10158,
+        "clean_logit": -2.7548828125,
+        "patched_logit": -2.7546043395996094,
+        "logit_change": 0.000278472900390625
+      },
+      {
+        "position": 13,
+        "token": " handed",
+        "token_id": 607,
+        "clean_logit": 1.6804192066192627,
+        "patched_logit": 1.6802211999893188,
+        "logit_change": -0.00019800662994384766
+      },
+      {
+        "position": 14,
+        "token": " her",
+        "token_id": 4710,
+        "clean_logit": -2.7632784843444824,
+        "patched_logit": -2.7636375427246094,
+        "logit_change": -0.0003590583801269531
+      },
+      {
+        "position": 15,
+        "token": " notes",
+        "token_id": 284,
+        "clean_logit": 5.513777256011963,
+        "patched_logit": 5.513759136199951,
+        "logit_change": -1.811981201171875e-05
+      },
+      {
+        "position": 16,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 6.904187202453613,
+        "patched_logit": 6.904701232910156,
+        "logit_change": 0.0005140304565429688
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_2",
+    "sentence_text": "While camping, Mary and Alan set up tents. Mary decided to give a flashlight to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "While",
+      " camping",
+      ",",
+      " Mary",
+      " and",
+      " Alan",
+      " set",
+      " up",
+      " tents",
+      ".",
+      " Mary",
+      " decided",
+      " to",
+      " give",
+      " a",
+      " flashlight",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        "Alan"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.8024692535400391,
+      "corrupted_logit_diff": -0.6026391983032227,
+      "patched_logit_diff": -0.7971153259277344,
+      "ioi_metric": 0.9732075957945375,
+      "io_token": "Alan",
+      "s_token": "Mary",
+      "io_logit_change": 0.0008535385131835938,
+      "s_logit_change": -0.004500389099121094
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 3633,
+        "clean_logit": 14.157031059265137,
+        "patched_logit": 14.156832695007324,
+        "logit_change": -0.0001983642578125
+      },
+      {
+        "position": 1,
+        "token": "While",
+        "token_id": 22498,
+        "clean_logit": -2.375696897506714,
+        "patched_logit": -2.3758883476257324,
+        "logit_change": -0.0001914501190185547
+      },
+      {
+        "position": 2,
+        "token": " camping",
+        "token_id": 11,
+        "clean_logit": 9.25517463684082,
+        "patched_logit": 9.2549409866333,
+        "logit_change": -0.00023365020751953125
+      },
+      {
+        "position": 3,
+        "token": ",",
+        "token_id": 5335,
+        "clean_logit": 1.7647204399108887,
+        "patched_logit": 1.760636806488037,
+        "logit_change": -0.0040836334228515625
+      },
+      {
+        "position": 4,
+        "token": " Mary",
+        "token_id": 290,
+        "clean_logit": 7.257673263549805,
+        "patched_logit": 7.257558822631836,
+        "logit_change": -0.00011444091796875
+      },
+      {
+        "position": 5,
+        "token": " and",
+        "token_id": 12246,
+        "clean_logit": -0.2037644386291504,
+        "patched_logit": -0.20325517654418945,
+        "logit_change": 0.0005092620849609375
+      },
+      {
+        "position": 6,
+        "token": " Alan",
+        "token_id": 900,
+        "clean_logit": 2.040128231048584,
+        "patched_logit": 2.0401039123535156,
+        "logit_change": -2.4318695068359375e-05
+      },
+      {
+        "position": 7,
+        "token": " set",
+        "token_id": 510,
+        "clean_logit": 2.5259416103363037,
+        "patched_logit": 2.5257511138916016,
+        "logit_change": -0.00019049644470214844
+      },
+      {
+        "position": 8,
+        "token": " up",
+        "token_id": 29804,
+        "clean_logit": -3.5898396968841553,
+        "patched_logit": -3.5900518894195557,
+        "logit_change": -0.00021219253540039062
+      },
+      {
+        "position": 9,
+        "token": " tents",
+        "token_id": 13,
+        "clean_logit": 11.147321701049805,
+        "patched_logit": 11.147186279296875,
+        "logit_change": -0.0001354217529296875
+      },
+      {
+        "position": 10,
+        "token": ".",
+        "token_id": 5335,
+        "clean_logit": 1.7647204399108887,
+        "patched_logit": 1.760636806488037,
+        "logit_change": -0.0040836334228515625
+      },
+      {
+        "position": 11,
+        "token": " Mary",
+        "token_id": 3066,
+        "clean_logit": 0.268643856048584,
+        "patched_logit": 0.2686469554901123,
+        "logit_change": 3.0994415283203125e-06
+      },
+      {
+        "position": 12,
+        "token": " decided",
+        "token_id": 284,
+        "clean_logit": 5.51607608795166,
+        "patched_logit": 5.515910625457764,
+        "logit_change": -0.00016546249389648438
+      },
+      {
+        "position": 13,
+        "token": " to",
+        "token_id": 1577,
+        "clean_logit": -0.10088133811950684,
+        "patched_logit": -0.10147285461425781,
+        "logit_change": -0.0005915164947509766
+      },
+      {
+        "position": 14,
+        "token": " give",
+        "token_id": 257,
+        "clean_logit": 5.00830078125,
+        "patched_logit": 5.0080790519714355,
+        "logit_change": -0.00022172927856445312
+      },
+      {
+        "position": 15,
+        "token": " a",
+        "token_id": 38371,
+        "clean_logit": -3.6294374465942383,
+        "patched_logit": -3.6289241313934326,
+        "logit_change": 0.0005133152008056641
+      },
+      {
+        "position": 16,
+        "token": " flashlight",
+        "token_id": 284,
+        "clean_logit": 5.51607608795166,
+        "patched_logit": 5.515910625457764,
+        "logit_change": -0.00016546249389648438
+      },
+      {
+        "position": 17,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 6.8594512939453125,
+        "patched_logit": 6.8596391677856445,
+        "logit_change": 0.00018787384033203125
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_3",
+    "sentence_text": "During the workshop, Elizabeth and Andrew were crafting. Elizabeth decided to give a handmade card to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "During",
+      " the",
+      " workshop",
+      ",",
+      " Elizabeth",
+      " and",
+      " Andrew",
+      " were",
+      " crafting",
+      ".",
+      " Elizabeth",
+      " decided",
+      " to",
+      " give",
+      " a",
+      " handmade",
+      " card",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        ",",
+        "."
+      ],
+      "decrease": [
+        " a",
+        " the"
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 1.7713794708251953,
+      "corrupted_logit_diff": -6.795493125915527,
+      "patched_logit_diff": 0.3817100524902344,
+      "ioi_metric": 0.8377856793547201,
+      "io_token": "Andrew",
+      "s_token": "Elizabeth",
+      "io_logit_change": -0.2753267288208008,
+      "s_logit_change": 1.1143426895141602
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 7191,
+        "clean_logit": -0.7016444206237793,
+        "patched_logit": -0.5980120897293091,
+        "logit_change": 0.10363233089447021
+      },
+      {
+        "position": 1,
+        "token": "During",
+        "token_id": 262,
+        "clean_logit": 14.827814102172852,
+        "patched_logit": 14.923042297363281,
+        "logit_change": 0.09522819519042969
+      },
+      {
+        "position": 2,
+        "token": " the",
+        "token_id": 20243,
+        "clean_logit": 4.76911735534668,
+        "patched_logit": 4.293193340301514,
+        "logit_change": -0.475924015045166
+      },
+      {
+        "position": 3,
+        "token": " workshop",
+        "token_id": 11,
+        "clean_logit": 8.394668579101562,
+        "patched_logit": 8.452306747436523,
+        "logit_change": 0.05763816833496094
+      },
+      {
+        "position": 4,
+        "token": ",",
+        "token_id": 10674,
+        "clean_logit": 13.6715726852417,
+        "patched_logit": 14.784285545349121,
+        "logit_change": 1.1127128601074219
+      },
+      {
+        "position": 5,
+        "token": " Elizabeth",
+        "token_id": 290,
+        "clean_logit": 8.522716522216797,
+        "patched_logit": 8.579744338989258,
+        "logit_change": 0.05702781677246094
+      },
+      {
+        "position": 6,
+        "token": " and",
+        "token_id": 6858,
+        "clean_logit": 16.107624053955078,
+        "patched_logit": 15.874207496643066,
+        "logit_change": -0.23341655731201172
+      },
+      {
+        "position": 7,
+        "token": " Andrew",
+        "token_id": 547,
+        "clean_logit": 5.107931137084961,
+        "patched_logit": 5.223333358764648,
+        "logit_change": 0.1154022216796875
+      },
+      {
+        "position": 8,
+        "token": " were",
+        "token_id": 21671,
+        "clean_logit": 2.9029197692871094,
+        "patched_logit": 2.868995189666748,
+        "logit_change": -0.03392457962036133
+      },
+      {
+        "position": 9,
+        "token": " crafting",
+        "token_id": 13,
+        "clean_logit": 7.119994163513184,
+        "patched_logit": 7.241186141967773,
+        "logit_change": 0.12119197845458984
+      },
+      {
+        "position": 10,
+        "token": ".",
+        "token_id": 10674,
+        "clean_logit": 13.6715726852417,
+        "patched_logit": 14.784285545349121,
+        "logit_change": 1.1127128601074219
+      },
+      {
+        "position": 11,
+        "token": " Elizabeth",
+        "token_id": 3066,
+        "clean_logit": 3.206122875213623,
+        "patched_logit": 3.33192777633667,
+        "logit_change": 0.12580490112304688
+      },
+      {
+        "position": 12,
+        "token": " decided",
+        "token_id": 284,
+        "clean_logit": 8.19869327545166,
+        "patched_logit": 8.323223114013672,
+        "logit_change": 0.12452983856201172
+      },
+      {
+        "position": 13,
+        "token": " to",
+        "token_id": 1577,
+        "clean_logit": 9.645454406738281,
+        "patched_logit": 9.646406173706055,
+        "logit_change": 0.0009517669677734375
+      },
+      {
+        "position": 14,
+        "token": " give",
+        "token_id": 257,
+        "clean_logit": 13.255167961120605,
+        "patched_logit": 13.258495330810547,
+        "logit_change": 0.0033273696899414062
+      },
+      {
+        "position": 15,
+        "token": " a",
+        "token_id": 40973,
+        "clean_logit": 1.899612307548523,
+        "patched_logit": 1.4134222269058228,
+        "logit_change": -0.4861900806427002
+      },
+      {
+        "position": 16,
+        "token": " handmade",
+        "token_id": 2657,
+        "clean_logit": 5.59115743637085,
+        "patched_logit": 5.950784683227539,
+        "logit_change": 0.35962724685668945
+      },
+      {
+        "position": 17,
+        "token": " card",
+        "token_id": 284,
+        "clean_logit": 8.19869327545166,
+        "patched_logit": 8.323223114013672,
+        "logit_change": 0.12452983856201172
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_4",
+    "sentence_text": "During the lecture, Kate and Edward took notes. Kate decided to give a pen to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "During",
+      " the",
+      " lecture",
+      ",",
+      " Kate",
+      " and",
+      " Edward",
+      " took",
+      " notes",
+      ".",
+      " Kate",
+      " decided",
+      " to",
+      " give",
+      " a",
+      " pen",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        "Edward"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 0.46138858795166016,
+      "corrupted_logit_diff": 0.5337581634521484,
+      "patched_logit_diff": 0.464141845703125,
+      "ioi_metric": 0.9619555906964485,
+      "io_token": "Edward",
+      "s_token": "Kate",
+      "io_logit_change": 0.00031757354736328125,
+      "s_logit_change": -0.0024356842041015625
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 7191,
+        "clean_logit": 13.58872127532959,
+        "patched_logit": 13.589259147644043,
+        "logit_change": 0.000537872314453125
+      },
+      {
+        "position": 1,
+        "token": "During",
+        "token_id": 262,
+        "clean_logit": 5.09174919128418,
+        "patched_logit": 5.091742515563965,
+        "logit_change": -6.67572021484375e-06
+      },
+      {
+        "position": 2,
+        "token": " the",
+        "token_id": 19143,
+        "clean_logit": -2.8708975315093994,
+        "patched_logit": -2.8712735176086426,
+        "logit_change": -0.00037598609924316406
+      },
+      {
+        "position": 3,
+        "token": " lecture",
+        "token_id": 11,
+        "clean_logit": 9.314594268798828,
+        "patched_logit": 9.314844131469727,
+        "logit_change": 0.0002498626708984375
+      },
+      {
+        "position": 4,
+        "token": ",",
+        "token_id": 16693,
+        "clean_logit": -0.7221672534942627,
+        "patched_logit": -0.7252202033996582,
+        "logit_change": -0.003052949905395508
+      },
+      {
+        "position": 5,
+        "token": " Kate",
+        "token_id": 290,
+        "clean_logit": 7.276825428009033,
+        "patched_logit": 7.2771477699279785,
+        "logit_change": 0.0003223419189453125
+      },
+      {
+        "position": 6,
+        "token": " and",
+        "token_id": 10443,
+        "clean_logit": 0.6176676154136658,
+        "patched_logit": 0.6176997423171997,
+        "logit_change": 3.212690353393555e-05
+      },
+      {
+        "position": 7,
+        "token": " Edward",
+        "token_id": 1718,
+        "clean_logit": 1.6476798057556152,
+        "patched_logit": 1.647714614868164,
+        "logit_change": 3.4809112548828125e-05
+      },
+      {
+        "position": 8,
+        "token": " took",
+        "token_id": 4710,
+        "clean_logit": -2.864433765411377,
+        "patched_logit": -2.864412784576416,
+        "logit_change": 2.09808349609375e-05
+      },
+      {
+        "position": 9,
+        "token": " notes",
+        "token_id": 13,
+        "clean_logit": 11.144865989685059,
+        "patched_logit": 11.14522647857666,
+        "logit_change": 0.0003604888916015625
+      },
+      {
+        "position": 10,
+        "token": ".",
+        "token_id": 16693,
+        "clean_logit": -0.7221672534942627,
+        "patched_logit": -0.7252202033996582,
+        "logit_change": -0.003052949905395508
+      },
+      {
+        "position": 11,
+        "token": " Kate",
+        "token_id": 3066,
+        "clean_logit": 0.18967556953430176,
+        "patched_logit": 0.1896291971206665,
+        "logit_change": -4.6372413635253906e-05
+      },
+      {
+        "position": 12,
+        "token": " decided",
+        "token_id": 284,
+        "clean_logit": 5.552533149719238,
+        "patched_logit": 5.55285120010376,
+        "logit_change": 0.0003180503845214844
+      },
+      {
+        "position": 13,
+        "token": " to",
+        "token_id": 1577,
+        "clean_logit": -0.08819222450256348,
+        "patched_logit": -0.08860254287719727,
+        "logit_change": -0.00041031837463378906
+      },
+      {
+        "position": 14,
+        "token": " give",
+        "token_id": 257,
+        "clean_logit": 4.9943437576293945,
+        "patched_logit": 4.994362831115723,
+        "logit_change": 1.9073486328125e-05
+      },
+      {
+        "position": 15,
+        "token": " a",
+        "token_id": 3112,
+        "clean_logit": -1.342857837677002,
+        "patched_logit": -1.3435173034667969,
+        "logit_change": -0.0006594657897949219
+      },
+      {
+        "position": 16,
+        "token": " pen",
+        "token_id": 284,
+        "clean_logit": 5.552533149719238,
+        "patched_logit": 5.55285120010376,
+        "logit_change": 0.0003180503845214844
+      },
+      {
+        "position": 17,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 7.020196437835693,
+        "patched_logit": 7.020823955535889,
+        "logit_change": 0.0006275177001953125
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_5",
+    "sentence_text": "At the workshop, Rose and Henry honed their skills. Rose handed a tool to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "At",
+      " the",
+      " workshop",
+      ",",
+      " Rose",
+      " and",
+      " Henry",
+      " hon",
+      "ed",
+      " their",
+      " skills",
+      ".",
+      " Rose",
+      " handed",
+      " a",
+      " tool",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        " the",
+        " and"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 0.09636402130126953,
+      "corrupted_logit_diff": 0.2414226531982422,
+      "patched_logit_diff": 0.10459136962890625,
+      "ioi_metric": 0.9432826008349495,
+      "io_token": "Henry",
+      "s_token": "Rose",
+      "io_logit_change": 0.0027112960815429688,
+      "s_logit_change": -0.00551605224609375
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 2953,
+        "clean_logit": 14.381428718566895,
+        "patched_logit": 14.382479667663574,
+        "logit_change": 0.0010509490966796875
+      },
+      {
+        "position": 1,
+        "token": "At",
+        "token_id": 262,
+        "clean_logit": 5.107203483581543,
+        "patched_logit": 5.107372283935547,
+        "logit_change": 0.00016880035400390625
+      },
+      {
+        "position": 2,
+        "token": " the",
+        "token_id": 20243,
+        "clean_logit": -3.007929563522339,
+        "patched_logit": -3.006547451019287,
+        "logit_change": 0.0013821125030517578
+      },
+      {
+        "position": 3,
+        "token": " workshop",
+        "token_id": 11,
+        "clean_logit": 9.407384872436523,
+        "patched_logit": 9.408143043518066,
+        "logit_change": 0.0007581710815429688
+      },
+      {
+        "position": 4,
+        "token": ",",
+        "token_id": 8049,
+        "clean_logit": -1.884596347808838,
+        "patched_logit": -1.8914871215820312,
+        "logit_change": -0.006890773773193359
+      },
+      {
+        "position": 5,
+        "token": " Rose",
+        "token_id": 290,
+        "clean_logit": 7.346490859985352,
+        "patched_logit": 7.346985816955566,
+        "logit_change": 0.0004949569702148438
+      },
+      {
+        "position": 6,
+        "token": " and",
+        "token_id": 8616,
+        "clean_logit": -0.36747050285339355,
+        "patched_logit": -0.36613166332244873,
+        "logit_change": 0.0013388395309448242
+      },
+      {
+        "position": 7,
+        "token": " Henry",
+        "token_id": 3032,
+        "clean_logit": -0.15900778770446777,
+        "patched_logit": -0.15927481651306152,
+        "logit_change": -0.00026702880859375
+      },
+      {
+        "position": 8,
+        "token": " hon",
+        "token_id": 276,
+        "clean_logit": 9.18698501586914,
+        "patched_logit": 9.187376022338867,
+        "logit_change": 0.0003910064697265625
+      },
+      {
+        "position": 9,
+        "token": "ed",
+        "token_id": 511,
+        "clean_logit": 1.7862558364868164,
+        "patched_logit": 1.7862203121185303,
+        "logit_change": -3.552436828613281e-05
+      },
+      {
+        "position": 10,
+        "token": " their",
+        "token_id": 4678,
+        "clean_logit": -1.5338857173919678,
+        "patched_logit": -1.5337185859680176,
+        "logit_change": 0.0001671314239501953
+      },
+      {
+        "position": 11,
+        "token": " skills",
+        "token_id": 13,
+        "clean_logit": 11.200048446655273,
+        "patched_logit": 11.201107025146484,
+        "logit_change": 0.0010585784912109375
+      },
+      {
+        "position": 12,
+        "token": ".",
+        "token_id": 8049,
+        "clean_logit": -1.884596347808838,
+        "patched_logit": -1.8914871215820312,
+        "logit_change": -0.006890773773193359
+      },
+      {
+        "position": 13,
+        "token": " Rose",
+        "token_id": 10158,
+        "clean_logit": -2.711813449859619,
+        "patched_logit": -2.7119359970092773,
+        "logit_change": -0.00012254714965820312
+      },
+      {
+        "position": 14,
+        "token": " handed",
+        "token_id": 257,
+        "clean_logit": 5.069484710693359,
+        "patched_logit": 5.069622039794922,
+        "logit_change": 0.0001373291015625
+      },
+      {
+        "position": 15,
+        "token": " a",
+        "token_id": 2891,
+        "clean_logit": -2.7068467140197754,
+        "patched_logit": -2.7062978744506836,
+        "logit_change": 0.0005488395690917969
+      },
+      {
+        "position": 16,
+        "token": " tool",
+        "token_id": 284,
+        "clean_logit": 5.603014945983887,
+        "patched_logit": 5.603359222412109,
+        "logit_change": 0.00034427642822265625
+      },
+      {
+        "position": 17,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 7.080144882202148,
+        "patched_logit": 7.081035614013672,
+        "logit_change": 0.0008907318115234375
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_6",
+    "sentence_text": "Then, Anna and Joshua visited the museum. Joshua gave a souvenir to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "Then",
+      ",",
+      " Anna",
+      " and",
+      " Joshua",
+      " visited",
+      " the",
+      " museum",
+      ".",
+      " Joshua",
+      " gave",
+      " a",
+      " souven",
+      "ir",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        " the"
+      ],
+      "decrease": [
+        ".",
+        " and"
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.28102970123291016,
+      "corrupted_logit_diff": -0.4321908950805664,
+      "patched_logit_diff": -0.2801675796508789,
+      "ioi_metric": 1.0057033260990258,
+      "io_token": "Anna",
+      "s_token": "Joshua",
+      "io_logit_change": -0.0013828277587890625,
+      "s_logit_change": -0.0022449493408203125
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 6423,
+        "clean_logit": 11.51768970489502,
+        "patched_logit": 11.517670631408691,
+        "logit_change": -1.9073486328125e-05
+      },
+      {
+        "position": 1,
+        "token": "Then",
+        "token_id": 11,
+        "clean_logit": 9.381199836730957,
+        "patched_logit": 9.380938529968262,
+        "logit_change": -0.0002613067626953125
+      },
+      {
+        "position": 2,
+        "token": ",",
+        "token_id": 11735,
+        "clean_logit": -0.7683597803115845,
+        "patched_logit": -0.7697259187698364,
+        "logit_change": -0.0013661384582519531
+      },
+      {
+        "position": 3,
+        "token": " Anna",
+        "token_id": 290,
+        "clean_logit": 7.33252477645874,
+        "patched_logit": 7.33229923248291,
+        "logit_change": -0.00022554397583007812
+      },
+      {
+        "position": 4,
+        "token": " and",
+        "token_id": 20700,
+        "clean_logit": -0.9521526098251343,
+        "patched_logit": -0.9543994665145874,
+        "logit_change": -0.002246856689453125
+      },
+      {
+        "position": 5,
+        "token": " Joshua",
+        "token_id": 8672,
+        "clean_logit": -3.382847309112549,
+        "patched_logit": -3.3822731971740723,
+        "logit_change": 0.0005741119384765625
+      },
+      {
+        "position": 6,
+        "token": " visited",
+        "token_id": 262,
+        "clean_logit": 5.190112113952637,
+        "patched_logit": 5.189937591552734,
+        "logit_change": -0.00017452239990234375
+      },
+      {
+        "position": 7,
+        "token": " the",
+        "token_id": 13257,
+        "clean_logit": -4.830399036407471,
+        "patched_logit": -4.828969955444336,
+        "logit_change": 0.0014290809631347656
+      },
+      {
+        "position": 8,
+        "token": " museum",
+        "token_id": 13,
+        "clean_logit": 11.197629928588867,
+        "patched_logit": 11.197181701660156,
+        "logit_change": -0.0004482269287109375
+      },
+      {
+        "position": 9,
+        "token": ".",
+        "token_id": 20700,
+        "clean_logit": -0.9521526098251343,
+        "patched_logit": -0.9543994665145874,
+        "logit_change": -0.002246856689453125
+      },
+      {
+        "position": 10,
+        "token": " Joshua",
+        "token_id": 2921,
+        "clean_logit": -0.3834960460662842,
+        "patched_logit": -0.3836941719055176,
+        "logit_change": -0.00019812583923339844
+      },
+      {
+        "position": 11,
+        "token": " gave",
+        "token_id": 257,
+        "clean_logit": 5.1384382247924805,
+        "patched_logit": 5.138288974761963,
+        "logit_change": -0.00014925003051757812
+      },
+      {
+        "position": 12,
+        "token": " a",
+        "token_id": 45043,
+        "clean_logit": -6.512669563293457,
+        "patched_logit": -6.512091636657715,
+        "logit_change": 0.0005779266357421875
+      },
+      {
+        "position": 13,
+        "token": " souven",
+        "token_id": 343,
+        "clean_logit": 8.531362533569336,
+        "patched_logit": 8.531550407409668,
+        "logit_change": 0.00018787384033203125
+      },
+      {
+        "position": 14,
+        "token": "ir",
+        "token_id": 284,
+        "clean_logit": 5.578207969665527,
+        "patched_logit": 5.577973365783691,
+        "logit_change": -0.0002346038818359375
+      },
+      {
+        "position": 15,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 6.715693473815918,
+        "patched_logit": 6.71544075012207,
+        "logit_change": -0.00025272369384765625
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_7",
+    "sentence_text": "After the exhibition, Emily and Stephen discussed the art. Emily handed a catalog to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "After",
+      " the",
+      " exhibition",
+      ",",
+      " Emily",
+      " and",
+      " Stephen",
+      " discussed",
+      " the",
+      " art",
+      ".",
+      " Emily",
+      " handed",
+      " a",
+      " catalog",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        "Stephen"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 1.096628189086914,
+      "corrupted_logit_diff": 1.1853094100952148,
+      "patched_logit_diff": 1.098637580871582,
+      "ioi_metric": 0.9773414059727494,
+      "io_token": "Stephen",
+      "s_token": "Emily",
+      "io_logit_change": 0.000339508056640625,
+      "s_logit_change": -0.0016698837280273438
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 3260,
+        "clean_logit": 14.830732345581055,
+        "patched_logit": 14.83076000213623,
+        "logit_change": 2.765655517578125e-05
+      },
+      {
+        "position": 1,
+        "token": "After",
+        "token_id": 262,
+        "clean_logit": 5.071938991546631,
+        "patched_logit": 5.072139739990234,
+        "logit_change": 0.00020074844360351562
+      },
+      {
+        "position": 2,
+        "token": " the",
+        "token_id": 17127,
+        "clean_logit": -3.13200306892395,
+        "patched_logit": -3.1321208477020264,
+        "logit_change": -0.00011777877807617188
+      },
+      {
+        "position": 3,
+        "token": " exhibition",
+        "token_id": 11,
+        "clean_logit": 9.313374519348145,
+        "patched_logit": 9.313743591308594,
+        "logit_change": 0.00036907196044921875
+      },
+      {
+        "position": 4,
+        "token": ",",
+        "token_id": 17608,
+        "clean_logit": -0.3801344633102417,
+        "patched_logit": -0.3819044828414917,
+        "logit_change": -0.00177001953125
+      },
+      {
+        "position": 5,
+        "token": " Emily",
+        "token_id": 290,
+        "clean_logit": 7.256485462188721,
+        "patched_logit": 7.256732940673828,
+        "logit_change": 0.0002474784851074219
+      },
+      {
+        "position": 6,
+        "token": " and",
+        "token_id": 7970,
+        "clean_logit": 1.0503687858581543,
+        "patched_logit": 1.0506044626235962,
+        "logit_change": 0.00023567676544189453
+      },
+      {
+        "position": 7,
+        "token": " Stephen",
+        "token_id": 6693,
+        "clean_logit": -1.174145221710205,
+        "patched_logit": -1.1742472648620605,
+        "logit_change": -0.00010204315185546875
+      },
+      {
+        "position": 8,
+        "token": " discussed",
+        "token_id": 262,
+        "clean_logit": 5.071938991546631,
+        "patched_logit": 5.072139739990234,
+        "logit_change": 0.00020074844360351562
+      },
+      {
+        "position": 9,
+        "token": " the",
+        "token_id": 1242,
+        "clean_logit": -1.093562364578247,
+        "patched_logit": -1.0934860706329346,
+        "logit_change": 7.62939453125e-05
+      },
+      {
+        "position": 10,
+        "token": " art",
+        "token_id": 13,
+        "clean_logit": 11.100482940673828,
+        "patched_logit": 11.100706100463867,
+        "logit_change": 0.0002231597900390625
+      },
+      {
+        "position": 11,
+        "token": ".",
+        "token_id": 17608,
+        "clean_logit": -0.3801344633102417,
+        "patched_logit": -0.3819044828414917,
+        "logit_change": -0.00177001953125
+      },
+      {
+        "position": 12,
+        "token": " Emily",
+        "token_id": 10158,
+        "clean_logit": -2.803098678588867,
+        "patched_logit": -2.802931308746338,
+        "logit_change": 0.00016736984252929688
+      },
+      {
+        "position": 13,
+        "token": " handed",
+        "token_id": 257,
+        "clean_logit": 5.0151166915893555,
+        "patched_logit": 5.0154218673706055,
+        "logit_change": 0.00030517578125
+      },
+      {
+        "position": 14,
+        "token": " a",
+        "token_id": 18388,
+        "clean_logit": -3.492171049118042,
+        "patched_logit": -3.4923975467681885,
+        "logit_change": -0.00022649765014648438
+      },
+      {
+        "position": 15,
+        "token": " catalog",
+        "token_id": 284,
+        "clean_logit": 5.525263786315918,
+        "patched_logit": 5.525602340698242,
+        "logit_change": 0.00033855438232421875
+      },
+      {
+        "position": 16,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 6.906820774078369,
+        "patched_logit": 6.907214164733887,
+        "logit_change": 0.0003933906555175781
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_8",
+    "sentence_text": "While gardening, Mary and Charles planted flowers. Mary decided to give a seed packet to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "While",
+      " gardening",
+      ",",
+      " Mary",
+      " and",
+      " Charles",
+      " planted",
+      " flowers",
+      ".",
+      " Mary",
+      " decided",
+      " to",
+      " give",
+      " a",
+      " seed",
+      " packet",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.4649515151977539,
+      "corrupted_logit_diff": -0.20155811309814453,
+      "patched_logit_diff": -0.45770740509033203,
+      "ioi_metric": 0.972496994800643,
+      "io_token": "Charles",
+      "s_token": "Mary",
+      "io_logit_change": -0.0005207061767578125,
+      "s_logit_change": -0.0077648162841796875
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 3633,
+        "clean_logit": 14.305222511291504,
+        "patched_logit": 14.304903984069824,
+        "logit_change": -0.0003185272216796875
+      },
+      {
+        "position": 1,
+        "token": "While",
+        "token_id": 46072,
+        "clean_logit": -4.221885681152344,
+        "patched_logit": -4.222963809967041,
+        "logit_change": -0.0010781288146972656
+      },
+      {
+        "position": 2,
+        "token": " gardening",
+        "token_id": 11,
+        "clean_logit": 9.305936813354492,
+        "patched_logit": 9.30569076538086,
+        "logit_change": -0.0002460479736328125
+      },
+      {
+        "position": 3,
+        "token": ",",
+        "token_id": 5335,
+        "clean_logit": 1.746553659439087,
+        "patched_logit": 1.7399275302886963,
+        "logit_change": -0.006626129150390625
+      },
+      {
+        "position": 4,
+        "token": " Mary",
+        "token_id": 290,
+        "clean_logit": 7.329241752624512,
+        "patched_logit": 7.329057693481445,
+        "logit_change": -0.00018405914306640625
+      },
+      {
+        "position": 5,
+        "token": " and",
+        "token_id": 7516,
+        "clean_logit": 0.5275769233703613,
+        "patched_logit": 0.5269607305526733,
+        "logit_change": -0.0006161928176879883
+      },
+      {
+        "position": 6,
+        "token": " Charles",
+        "token_id": 18969,
+        "clean_logit": -5.491149425506592,
+        "patched_logit": -5.492025375366211,
+        "logit_change": -0.0008759498596191406
+      },
+      {
+        "position": 7,
+        "token": " planted",
+        "token_id": 12734,
+        "clean_logit": -4.865117073059082,
+        "patched_logit": -4.86610746383667,
+        "logit_change": -0.0009903907775878906
+      },
+      {
+        "position": 8,
+        "token": " flowers",
+        "token_id": 13,
+        "clean_logit": 11.248189926147461,
+        "patched_logit": 11.248056411743164,
+        "logit_change": -0.000133514404296875
+      },
+      {
+        "position": 9,
+        "token": ".",
+        "token_id": 5335,
+        "clean_logit": 1.746553659439087,
+        "patched_logit": 1.7399275302886963,
+        "logit_change": -0.006626129150390625
+      },
+      {
+        "position": 10,
+        "token": " Mary",
+        "token_id": 3066,
+        "clean_logit": 0.2760441303253174,
+        "patched_logit": 0.2759096622467041,
+        "logit_change": -0.00013446807861328125
+      },
+      {
+        "position": 11,
+        "token": " decided",
+        "token_id": 284,
+        "clean_logit": 5.537652015686035,
+        "patched_logit": 5.537436008453369,
+        "logit_change": -0.00021600723266601562
+      },
+      {
+        "position": 12,
+        "token": " to",
+        "token_id": 1577,
+        "clean_logit": -0.14635467529296875,
+        "patched_logit": -0.14706730842590332,
+        "logit_change": -0.0007126331329345703
+      },
+      {
+        "position": 13,
+        "token": " give",
+        "token_id": 257,
+        "clean_logit": 4.946175575256348,
+        "patched_logit": 4.946026802062988,
+        "logit_change": -0.000148773193359375
+      },
+      {
+        "position": 14,
+        "token": " a",
+        "token_id": 9403,
+        "clean_logit": -3.1396775245666504,
+        "patched_logit": -3.140486240386963,
+        "logit_change": -0.0008087158203125
+      },
+      {
+        "position": 15,
+        "token": " seed",
+        "token_id": 19638,
+        "clean_logit": -2.32542085647583,
+        "patched_logit": -2.3249192237854004,
+        "logit_change": 0.0005016326904296875
+      },
+      {
+        "position": 16,
+        "token": " packet",
+        "token_id": 284,
+        "clean_logit": 5.537652015686035,
+        "patched_logit": 5.537436008453369,
+        "logit_change": -0.00021600723266601562
+      },
+      {
+        "position": 17,
+        "token": " to",
+        "token_id": 50256,
+        "clean_logit": 7.034241676330566,
+        "patched_logit": 7.034366607666016,
+        "logit_change": 0.00012493133544921875
+      }
+    ]
+  },
+  {
+    "sentence_id": "sentence_9",
+    "sentence_text": "While camping, Mary and George set up the tents. Mary decided to give a flashlight to",
+    "head": "9.6",
+    "tokens": [
+      "<|endoftext|>",
+      "While",
+      " camping",
+      ",",
+      " Mary",
+      " and",
+      " George",
+      " set",
+      " up",
+      " the",
+      " tents",
+      ".",
+      " Mary",
+      " decided",
+      " to",
+      " give",
+      " a",
+      " flashlight",
+      " to"
+    ],
+    "ground_truth": {
+      "increase": [
+        ",",
+        "."
+      ],
+      "decrease": [
+        " and",
+        "While"
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 3.8137736320495605,
+      "corrupted_logit_diff": -3.700605869293213,
+      "patched_logit_diff": 1.197502613067627,
+      "ioi_metric": 0.6518313962564145,
+      "io_token": "George",
+      "s_token": "Mary",
+      "io_logit_change": -0.8590989112854004,
+      "s_logit_change": 1.7571721076965332
+    },
+    "all_token_logits": [
+      {
+        "position": 0,
+        "token": "<|endoftext|>",
+        "token_id": 3633,
+        "clean_logit": -0.5864925384521484,
+        "patched_logit": -0.3624594211578369,
+        "logit_change": 0.22403311729431152
+      },
+      {
+        "position": 1,
+        "token": "While",
+        "token_id": 22498,
+        "clean_logit": 5.6580915451049805,
+        "patched_logit": 5.247729778289795,
+        "logit_change": -0.41036176681518555
+      },
+      {
+        "position": 2,
+        "token": " camping",
+        "token_id": 11,
+        "clean_logit": 8.764077186584473,
+        "patched_logit": 8.833473205566406,
+        "logit_change": 0.0693960189819336
+      },
+      {
+        "position": 3,
+        "token": ",",
+        "token_id": 5335,
+        "clean_logit": 13.570326805114746,
+        "patched_logit": 14.957100868225098,
+        "logit_change": 1.3867740631103516
+      },
+      {
+        "position": 4,
+        "token": " Mary",
+        "token_id": 290,
+        "clean_logit": 9.291864395141602,
+        "patched_logit": 9.317549705505371,
+        "logit_change": 0.02568531036376953
+      },
+      {
+        "position": 5,
+        "token": " and",
+        "token_id": 4502,
+        "clean_logit": 16.907772064208984,
+        "patched_logit": 16.082279205322266,
+        "logit_change": -0.8254928588867188
+      },
+      {
+        "position": 6,
+        "token": " George",
+        "token_id": 900,
+        "clean_logit": 8.161006927490234,
+        "patched_logit": 8.165571212768555,
+        "logit_change": 0.0045642852783203125
+      },
+      {
+        "position": 7,
+        "token": " set",
+        "token_id": 510,
+        "clean_logit": 7.487301826477051,
+        "patched_logit": 7.708792686462402,
+        "logit_change": 0.22149085998535156
+      },
+      {
+        "position": 8,
+        "token": " up",
+        "token_id": 262,
+        "clean_logit": 15.666561126708984,
+        "patched_logit": 15.863388061523438,
+        "logit_change": 0.19682693481445312
+      },
+      {
+        "position": 9,
+        "token": " the",
+        "token_id": 29804,
+        "clean_logit": 4.136523723602295,
+        "patched_logit": 4.102221965789795,
+        "logit_change": -0.0343017578125
+      },
+      {
+        "position": 10,
+        "token": " tents",
+        "token_id": 13,
+        "clean_logit": 7.331486225128174,
+        "patched_logit": 7.448833465576172,
+        "logit_change": 0.11734724044799805
+      },
+      {
+        "position": 11,
+        "token": ".",
+        "token_id": 5335,
+        "clean_logit": 13.570326805114746,
+        "patched_logit": 14.957100868225098,
+        "logit_change": 1.3867740631103516
+      },
+      {
+        "position": 12,
+        "token": " Mary",
+        "token_id": 3066,
+        "clean_logit": 2.8962550163269043,
+        "patched_logit": 3.0258913040161133,
+        "logit_change": 0.12963628768920898
+      },
+      {
+        "position": 13,
+        "token": " decided",
+        "token_id": 284,
+        "clean_logit": 8.55407428741455,
+        "patched_logit": 8.609151840209961,
+        "logit_change": 0.055077552795410156
+      },
+      {
+        "position": 14,
+        "token": " to",
+        "token_id": 1577,
+        "clean_logit": 9.728795051574707,
+        "patched_logit": 9.813447952270508,
+        "logit_change": 0.08465290069580078
+      },
+      {
+        "position": 15,
+        "token": " give",
+        "token_id": 257,
+        "clean_logit": 13.608915328979492,
+        "patched_logit": 13.503978729248047,
+        "logit_change": -0.10493659973144531
+      },
+      {
+        "position": 16,
+        "token": " a",
+        "token_id": 38371,
+        "clean_logit": 6.258656978607178,
+        "patched_logit": 6.1949076652526855,
+        "logit_change": -0.06374931335449219
+      },
+      {
+        "position": 17,
+        "token": " flashlight",
+        "token_id": 284,
+        "clean_logit": 8.55407428741455,
+        "patched_logit": 8.609151840209961,
+        "logit_change": 0.055077552795410156
+      }
+    ]
+  }
+]

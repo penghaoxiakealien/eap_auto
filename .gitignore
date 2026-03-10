@@ -1,0 +1,14 @@
+results/
+tests/results/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.swp
+*.swo
+.ipynb_checkpoints/
+prompt.txt
+answer.txt
+ioi_all_formatted/
+tests/experiments/results/

@@ -1,0 +1,243 @@
+[
+  {
+    "sentence_id": "sentence_0",
+    "sentence_text": "At the zoo, Rachel and Marcus watched the lions. Rachel handed a map to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        " and"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.6306467056274414,
+      "corrupted_logit_diff": -0.5196123123168945,
+      "patched_logit_diff": -0.6249504089355469,
+      "ioi_metric": 0.9486979077197925,
+      "io_token": "Marcus",
+      "s_token": "Rachel",
+      "io_logit_change": 0.0031614303588867188,
+      "s_logit_change": -0.0025348663330078125
+    }
+  },
+  {
+    "sentence_id": "sentence_1",
+    "sentence_text": "After the lecture, Victoria and Eric discussed the topic. Victoria handed her notes to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        " and"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 1.007939338684082,
+      "corrupted_logit_diff": 1.1046104431152344,
+      "patched_logit_diff": 1.0116033554077148,
+      "ioi_metric": 0.9620981187171367,
+      "io_token": "Eric",
+      "s_token": "Victoria",
+      "io_logit_change": 0.0015020370483398438,
+      "s_logit_change": -0.0021619796752929688
+    }
+  },
+  {
+    "sentence_id": "sentence_2",
+    "sentence_text": "While camping, Mary and Alan set up tents. Mary decided to give a flashlight to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        "Alan"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.8024692535400391,
+      "corrupted_logit_diff": -0.6026391983032227,
+      "patched_logit_diff": -0.7971153259277344,
+      "ioi_metric": 0.9732075957945375,
+      "io_token": "Alan",
+      "s_token": "Mary",
+      "io_logit_change": 0.0008535385131835938,
+      "s_logit_change": -0.004500389099121094
+    }
+  },
+  {
+    "sentence_id": "sentence_3",
+    "sentence_text": "During the workshop, Elizabeth and Andrew were crafting. Elizabeth decided to give a handmade card to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        ",",
+        "."
+      ],
+      "decrease": [
+        " a",
+        " the"
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 1.7713794708251953,
+      "corrupted_logit_diff": -6.795493125915527,
+      "patched_logit_diff": 0.3817100524902344,
+      "ioi_metric": 0.8377856793547201,
+      "io_token": "Andrew",
+      "s_token": "Elizabeth",
+      "io_logit_change": -0.2753267288208008,
+      "s_logit_change": 1.1143426895141602
+    }
+  },
+  {
+    "sentence_id": "sentence_4",
+    "sentence_text": "During the lecture, Kate and Edward took notes. Kate decided to give a pen to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        "Edward"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 0.46138858795166016,
+      "corrupted_logit_diff": 0.5337581634521484,
+      "patched_logit_diff": 0.464141845703125,
+      "ioi_metric": 0.9619555906964485,
+      "io_token": "Edward",
+      "s_token": "Kate",
+      "io_logit_change": 0.00031757354736328125,
+      "s_logit_change": -0.0024356842041015625
+    }
+  },
+  {
+    "sentence_id": "sentence_5",
+    "sentence_text": "At the workshop, Rose and Henry honed their skills. Rose handed a tool to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        " the",
+        " and"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 0.09636402130126953,
+      "corrupted_logit_diff": 0.2414226531982422,
+      "patched_logit_diff": 0.10459136962890625,
+      "ioi_metric": 0.9432826008349495,
+      "io_token": "Henry",
+      "s_token": "Rose",
+      "io_logit_change": 0.0027112960815429688,
+      "s_logit_change": -0.00551605224609375
+    }
+  },
+  {
+    "sentence_id": "sentence_6",
+    "sentence_text": "Then, Anna and Joshua visited the museum. Joshua gave a souvenir to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        " the"
+      ],
+      "decrease": [
+        ".",
+        " and"
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.28102970123291016,
+      "corrupted_logit_diff": -0.4321908950805664,
+      "patched_logit_diff": -0.2801675796508789,
+      "ioi_metric": 1.0057033260990258,
+      "io_token": "Anna",
+      "s_token": "Joshua",
+      "io_logit_change": -0.0013828277587890625,
+      "s_logit_change": -0.0022449493408203125
+    }
+  },
+  {
+    "sentence_id": "sentence_7",
+    "sentence_text": "After the exhibition, Emily and Stephen discussed the art. Emily handed a catalog to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        "Stephen"
+      ],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 1.096628189086914,
+      "corrupted_logit_diff": 1.1853094100952148,
+      "patched_logit_diff": 1.098637580871582,
+      "ioi_metric": 0.9773414059727494,
+      "io_token": "Stephen",
+      "s_token": "Emily",
+      "io_logit_change": 0.000339508056640625,
+      "s_logit_change": -0.0016698837280273438
+    }
+  },
+  {
+    "sentence_id": "sentence_8",
+    "sentence_text": "While gardening, Mary and Charles planted flowers. Mary decided to give a seed packet to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [],
+      "decrease": [
+        ".",
+        ","
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": -0.4649515151977539,
+      "corrupted_logit_diff": -0.20155811309814453,
+      "patched_logit_diff": -0.45770740509033203,
+      "ioi_metric": 0.972496994800643,
+      "io_token": "Charles",
+      "s_token": "Mary",
+      "io_logit_change": -0.0005207061767578125,
+      "s_logit_change": -0.0077648162841796875
+    }
+  },
+  {
+    "sentence_id": "sentence_9",
+    "sentence_text": "While camping, Mary and George set up the tents. Mary decided to give a flashlight to",
+    "head": "9.6",
+    "ground_truth": {
+      "increase": [
+        ",",
+        "."
+      ],
+      "decrease": [
+        " and",
+        "While"
+      ]
+    },
+    "detailed_effects": {
+      "clean_logit_diff": 3.8137736320495605,
+      "corrupted_logit_diff": -3.700605869293213,
+      "patched_logit_diff": 1.197502613067627,
+      "ioi_metric": 0.6518313962564145,
+      "io_token": "George",
+      "s_token": "Mary",
+      "io_logit_change": -0.8590989112854004,
+      "s_logit_change": 1.7571721076965332
+    }
+  }
+]

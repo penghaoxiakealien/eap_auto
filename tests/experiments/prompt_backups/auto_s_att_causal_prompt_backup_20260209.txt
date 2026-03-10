@@ -1,0 +1,91 @@
+        }
+    return all_gt
+
+async def predict_for_single_sentence(open_router, hypothesis, sid, sentence_data, sender_head, top_k, output_dir):
+    """
+    为单个句子生成预测，包含完整的Prompt和推理过程。
+    """
+    sentence_text = sentence_data['sentence_text']
+
+    system_prompt = (
+        "You are a meticulous AI researcher applying a hypothesis to predict experimental outcomes in an IOI task. Your task is to predict how corrupting a 'Sender Head' will change the attention of a 'Receiver Head'.\n\n"
+        "**--- Key Concepts in the IOI Task (Crucial Background) ---**\n"
+        "To understand the hypothesis, you must know these linguistic roles in the context of a sentence. However, in an IOI task, we may not provide the whole sentence, which means that IO at the end of the sentence may be hidden for prediction. For example, \"John and Mary went to the park. John gave a backpack to Mary.\"\n"
+        "In this sentence:"
+        "- **Subject (S):** The one performing the action. (e.g., 'John' gave the backpack).\n"
+        "- **Indirect Object (IO):** The recipient of the action. Although the token is not provided directly at the end of the sentence, but you can infer from the context.(e.g., 'Mary' received the backpack).\n"
+        "- **Direct Object (DO):** The object being transferred. (e.g., 'a backpack').\n"
+        "The IOI task is about correctly identifying the **Indirect Object (IO)**.\n\n"
+        "--- **Core Task & Causal Rules** ---\n"
+        "Your task is to predict how **corrupting Sender Head {sender_head}** will change the attention of downstream receiver heads according to the hypothesis.\n\n"
+        "This means you must predict:\n"
+        "1. When Sender Head {sender_head} is corrupted, which token(s) the receiver heads will pay **MORE** attention to. This happens because the Sender Head's normal **SUPPRESSION** of that token is removed. You will mark these with `<<token>>`.\n"
+        "2. When Sender Head {sender_head} is corrupted, which token(s) the receiver heads will pay **LESS** attention to. This happens because the Sender Head's normal **PROMOTION** of that token is removed. You will mark these with `[[token]]`.\n\n"
+        "**MUST FOLLOW RULES:**\n"
+        "- **Logical Consistency:** A token CANNOT be marked for both increase `<< >>` and decrease `[[ ]]`.\n"
+        "- **No Opposite Markings:** You MUST mark `<< >>` for increase and `[[ ]]` for decrease.\n"
+        f"- **Exact Count:** You must highlight exactly {top_k} token(s) for increase and {top_k} token(s) for decrease.\n"
+        "- **No Modification:** Do not omit, add, or change any part of the original sentence text.\n"
+        "- **Strict Formatting:** Provide the final marked sentence in a `[PREDICTION]` block.\n\n"
+    )
+    user_prompt = (
+        "--- **Illustrative Example (How to perform the task):** ---\n"
+        "To ensure you understand the method, here is a complete, self-contained example. **DO NOT use the functions or entities from this example for your real task.**\n\n"
+        "**Fictional Scenario:**\n"
+        "- We are studying how a fictional **Sender Head 0.0** affects a fictional **Receiver Head 0.1**.\n"
+        "- **Known function of Receiver Head 0.1:** It is a 'Verb Detector Head'. It tries to pay high attention to verbs in a sentence.\n"
+        "- **Hypothetical Hypothesis for Sender Head 0.0:** 'Sender Head 0.0 helps the Verb Detector by **promoting** attention to action verbs (like 'gave', 'ran') and **suppressing** attention to linking verbs (like 'is', 'was', 'were').'\n\n"
+        "**Example Sentence:** `ioi_9999: After the game, he was tired but she gave him a water bottle.`\n\n"
+        "**Correct Output for this Fictional Example:**\n"
+        "`ioi_9999: After the game, he <<was>> tired but she [[gave]] him a water bottle.`\n"
+        "--- End of Example ---\n\n"
+        "**Your Turn:"
+        f"**Hypothesis:** {hypothesis}\n"
+        "Now, using the **actual hypothesis for Head {sender_head}**, apply it to the following sentence.\n\n"
+        f"**Sentence to Analyze:**\n`{sid}: {sentence_text}`"
+    )
+    messages = [
+        {"role": "system", "content": system_prompt}, 
+        {"role": "user", "content": user_prompt}
+    ]
+    response = await open_router.generate(messages=messages, output_dir=output_dir)
+    
+    response_text = response.text.strip()
+    
+    prediction_matches = re.findall(r"\[PREDICTION\]\s*(.*)", response_text, re.DOTALL | re.IGNORECASE)
+
+    marked_sentence = prediction_matches[-1].strip() if prediction_matches else ""
+    # If multiple prediction lines exist, keep the last line that matches the sentence key.
+    if marked_sentence:
+        candidate_line = None
+        for line in marked_sentence.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("`") and line.endswith("`"):
+                line = line[1:-1].strip()
+            if line.startswith(f"{sid}:"):
+                candidate_line = line
+        if candidate_line:
+            marked_sentence = candidate_line
+    
+    increase, decrease = _parse_and_suffix_tokens(sentence_text, marked_sentence)
+    
+    return sid, {
+        "increase": increase,
+        "decrease": decrease,
+    }
+
+async def predict_attention_changes_for_sentences(open_router, hypothesis, sentences_data, sender_head, top_k, output_dir):
+    """
+    让LLM根据假设，为一批句子并行预测注意力变化。
+    """
+    print("正在根据假设并行预测每个句子的注意力变化...")
+    
+    tasks = []
+    for sid, data in sentences_data.items():
+        task = predict_for_single_sentence(
+            open_router, hypothesis, sid, data, sender_head, top_k, output_dir
+        )
+        tasks.append(task)
+    

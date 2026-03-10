@@ -1,0 +1,17 @@
+# 指定输入序列
+    # input_sequence = {
+    #     "ABBA":"When Victoria and Jane got a snack at the store, Jane decided to give it to",
+    #     "ABAB":"When Victoria and Jane got a snack at the store, Victoria decided to give it to",
+    #     "ABBA_V":"When Victoria invited Jane to get a snack at the store, Jane decided to give it to",
+    #     "ABAB_V":"When Victoria invited Jane to get a snack at the store, Victoria decided to give it to",
+    #     "ABBA_P":"When Victoria and Jane got a snack at the store, Jane was given it by",
+    #     "ABAB_P":"When Victoria and Jane got a snack at the store, Victoria was given it by",
+    #     "ABBA_PV":"When Victoria invited Jane to get a snack at the store, Jane was given it by",
+    #     "ABAB_PV":"When Victoria invited Jane to get a snack at the store, Victoria was given it by",
+    #     "ABC":"When Victoria and Jane got a snack at the store, Tom decided to give it to",
+    #     "ABC_V":"When Victoria invited Jane to get a snack at the store, Tom decided to give it to",
+    #     "ABCA":"When Victoria, Jane and Tom got a snack at the store, Victoria decided to give it to",
+    #     "ABCA_V":"When Victoria invited Jane and Tom to get a snack at the store, Victoria decided to give it to",
+    #     "ABCC":"When Victoria, Jane and Tom got a snack at the store, Tom decided to give it to",
+    #     "ABCC_V":"When Victoria invited Jane and Tom to get a snack at the store, Tom decided to give it to",
+    # }

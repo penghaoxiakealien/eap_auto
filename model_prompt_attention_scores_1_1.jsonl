@@ -1,0 +1,860 @@
+[
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "1_test",
+        "highlighted_sentence": "After the workshop , <<Russell>> and <<Clark>> went to the park . Clark gave a flower to",
+        "indirect_object": "Russell",
+        "important_tokens": [
+            {
+                "token": "Russell",
+                "score": 0.55
+            },
+            {
+                "token": "Clark_1",
+                "score": 0.15
+            }
+        ],
+        "original_sentence": "After the workshop, Russell and Clark went to the park. Clark gave a flower to",
+        "example_sentence": "Example 9_test: After the workshop , <<Russell>> and <<Clark>> went to the park . Clark gave a flower to {{Russell}}\n",
+        "example_activations": "Activations: (\"Russell\", 0.55), (\"Clark_1\", 0.15)\n",
+        "number_of_important_tokens": 2,
+        "attention_scores": [
+            {
+                "token": "After",
+                "score": 0.0
+            },
+            {
+                "token": "the_1",
+                "score": 0.0
+            },
+            {
+                "token": "workshop",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Russell",
+                "score": 0.55
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Clark_1",
+                "score": 0.15
+            },
+            {
+                "token": "went",
+                "score": 0.0
+            },
+            {
+                "token": "to_1",
+                "score": 0.0
+            },
+            {
+                "token": "the_2",
+                "score": 0.0
+            },
+            {
+                "token": "park",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Clark_2",
+                "score": 0.08
+            },
+            {
+                "token": "gave",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "flower",
+                "score": 0.0
+            },
+            {
+                "token": "to_2",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "2_test",
+        "highlighted_sentence": "After the lecture , <<Crystal>> and <<Dean>> went to the gym . Crystal gave a drink to",
+        "indirect_object": "Dean",
+        "important_tokens": [
+            {
+                "token": "Crystal_1",
+                "score": 0.16
+            },
+            {
+                "token": "Dean",
+                "score": 0.66
+            }
+        ],
+        "original_sentence": "After the lecture, Crystal and Dean went to the gym. Crystal gave a drink to",
+        "example_sentence": "Example 21_test: After the lecture , <<Crystal>> and <<Dean>> went to the gym . Crystal gave a drink to {{Dean}}\n",
+        "example_activations": "Activations: (\"Crystal_1\", 0.16), (\"Dean\", 0.66)\n",
+        "number_of_important_tokens": 2,
+        "attention_scores": [
+            {
+                "token": "After",
+                "score": 0.0
+            },
+            {
+                "token": "the_1",
+                "score": 0.0
+            },
+            {
+                "token": "lecture",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Crystal_1",
+                "score": 0.16
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Dean",
+                "score": 0.66
+            },
+            {
+                "token": "went",
+                "score": 0.0
+            },
+            {
+                "token": "to_1",
+                "score": 0.0
+            },
+            {
+                "token": "the_2",
+                "score": 0.0
+            },
+            {
+                "token": "gym",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Crystal_2",
+                "score": 0.02
+            },
+            {
+                "token": "gave",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "drink",
+                "score": 0.0
+            },
+            {
+                "token": "to_2",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "3_test",
+        "highlighted_sentence": "While chatting , <<Steven>> and <<Roman>> were at the cafe . Steven gave a drawing to",
+        "indirect_object": "Roman",
+        "important_tokens": [
+            {
+                "token": "Steven_1",
+                "score": 0.1
+            },
+            {
+                "token": "Roman",
+                "score": 0.7
+            }
+        ],
+        "original_sentence": "While chatting, Steven and Roman were at the cafe. Steven gave a drawing to",
+        "example_sentence": "Example 15_test: While chatting , <<Steven>> and <<Roman>> were at the cafe . Steven gave a drawing to {{Roman}}\n",
+        "example_activations": "Activations: (\"Steven_1\", 0.1), (\"Roman\", 0.7)\n",
+        "number_of_important_tokens": 2,
+        "attention_scores": [
+            {
+                "token": "While",
+                "score": 0.0
+            },
+            {
+                "token": "chatting",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Steven_1",
+                "score": 0.1
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Roman",
+                "score": 0.7
+            },
+            {
+                "token": "were",
+                "score": 0.0
+            },
+            {
+                "token": "at",
+                "score": 0.0
+            },
+            {
+                "token": "the",
+                "score": 0.0
+            },
+            {
+                "token": "cafe",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Steven_2",
+                "score": 0.01
+            },
+            {
+                "token": "gave",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "drawing",
+                "score": 0.0
+            },
+            {
+                "token": "to",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "4_test",
+        "highlighted_sentence": "When Aaron and <<Kelly>> got a gift at the party , Aaron decided to give it to",
+        "indirect_object": "Kelly",
+        "important_tokens": [
+            {
+                "token": "Kelly",
+                "score": 0.88
+            }
+        ],
+        "original_sentence": "When Aaron and Kelly got a gift at the party, Aaron decided to give it to",
+        "example_sentence": "Example 13_test: When Aaron and <<Kelly>> got a gift at the party , Aaron decided to give it to {{Kelly}}\n",
+        "example_activations": "Activations: (\"Kelly\", 0.88)\n",
+        "number_of_important_tokens": 1,
+        "attention_scores": [
+            {
+                "token": "When",
+                "score": 0.0
+            },
+            {
+                "token": "Aaron_1",
+                "score": 0.02
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Kelly",
+                "score": 0.88
+            },
+            {
+                "token": "got",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "gift",
+                "score": 0.0
+            },
+            {
+                "token": "at",
+                "score": 0.0
+            },
+            {
+                "token": "the",
+                "score": 0.0
+            },
+            {
+                "token": "party",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Aaron_2",
+                "score": 0.01
+            },
+            {
+                "token": "decided",
+                "score": 0.0
+            },
+            {
+                "token": "to_1",
+                "score": 0.0
+            },
+            {
+                "token": "give",
+                "score": 0.0
+            },
+            {
+                "token": "it",
+                "score": 0.0
+            },
+            {
+                "token": "to_2",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "5_test",
+        "highlighted_sentence": "After the meeting , Henry and <<River>> went to the cafe . Henry gave a summary to",
+        "indirect_object": "River",
+        "important_tokens": [
+            {
+                "token": "River",
+                "score": 0.83
+            }
+        ],
+        "original_sentence": "After the meeting, Henry and River went to the cafe. Henry gave a summary to",
+        "example_sentence": "Example 49_test: After the meeting , Henry and <<River>> went to the cafe . Henry gave a summary to {{River}}\n",
+        "example_activations": "Activations: (\"River\", 0.83)\n",
+        "number_of_important_tokens": 1,
+        "attention_scores": [
+            {
+                "token": "After",
+                "score": 0.0
+            },
+            {
+                "token": "the_1",
+                "score": 0.0
+            },
+            {
+                "token": "meeting",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Henry_1",
+                "score": 0.06
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "River",
+                "score": 0.83
+            },
+            {
+                "token": "went",
+                "score": 0.0
+            },
+            {
+                "token": "to_1",
+                "score": 0.0
+            },
+            {
+                "token": "the_2",
+                "score": 0.0
+            },
+            {
+                "token": "cafe",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Henry_2",
+                "score": 0.01
+            },
+            {
+                "token": "gave",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "summary",
+                "score": 0.0
+            },
+            {
+                "token": "to_2",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "6_test",
+        "highlighted_sentence": "While discussing , Sullivan and <<Marcus>> were at the studio . Sullivan gave a design to",
+        "indirect_object": "Marcus",
+        "important_tokens": [
+            {
+                "token": "Marcus",
+                "score": 0.9
+            }
+        ],
+        "original_sentence": "While discussing, Sullivan and Marcus were at the studio. Sullivan gave a design to",
+        "example_sentence": "Example 59_test: While discussing , Sullivan and <<Marcus>> were at the studio . Sullivan gave a design to {{Marcus}}\n",
+        "example_activations": "Activations: (\"Marcus\", 0.9)\n",
+        "number_of_important_tokens": 1,
+        "attention_scores": [
+            {
+                "token": "While",
+                "score": 0.0
+            },
+            {
+                "token": "discussing",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Sullivan_1",
+                "score": 0.03
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Marcus",
+                "score": 0.9
+            },
+            {
+                "token": "were",
+                "score": 0.0
+            },
+            {
+                "token": "at",
+                "score": 0.0
+            },
+            {
+                "token": "the",
+                "score": 0.0
+            },
+            {
+                "token": "studio",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Sullivan_2",
+                "score": 0.0
+            },
+            {
+                "token": "gave",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "design",
+                "score": 0.0
+            },
+            {
+                "token": "to",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "7_test",
+        "highlighted_sentence": "While reviewing , Mark and <<Steven>> were at the library . Mark gave a manuscript to",
+        "indirect_object": "Steven",
+        "important_tokens": [
+            {
+                "token": "Steven",
+                "score": 0.73
+            }
+        ],
+        "original_sentence": "While reviewing, Mark and Steven were at the library. Mark gave a manuscript to",
+        "example_sentence": "Example 55_test: While reviewing , Mark and <<Steven>> were at the library . Mark gave a manuscript to {{Steven}}\n",
+        "example_activations": "Activations: (\"Steven\", 0.73)\n",
+        "number_of_important_tokens": 1,
+        "attention_scores": [
+            {
+                "token": "While",
+                "score": 0.0
+            },
+            {
+                "token": "reviewing",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Mark_1",
+                "score": 0.04
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Steven",
+                "score": 0.73
+            },
+            {
+                "token": "were",
+                "score": 0.0
+            },
+            {
+                "token": "at",
+                "score": 0.0
+            },
+            {
+                "token": "the",
+                "score": 0.0
+            },
+            {
+                "token": "library",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Mark_2",
+                "score": 0.01
+            },
+            {
+                "token": "gave",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "manuscript",
+                "score": 0.0
+            },
+            {
+                "token": "to",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "8_test",
+        "highlighted_sentence": "Morgan and <<Mary>> had a heated debate . Afterwards Morgan said to",
+        "indirect_object": "Mary",
+        "important_tokens": [
+            {
+                "token": "Mary",
+                "score": 0.94
+            }
+        ],
+        "original_sentence": "Morgan and Mary had a heated debate. Afterwards Morgan said to",
+        "example_sentence": "Example 8_test: Morgan and <<Mary>> had a heated debate . Afterwards Morgan said to {{Mary}}\n",
+        "example_activations": "Activations: (\"Mary\", 0.94)\n",
+        "number_of_important_tokens": 1,
+        "attention_scores": [
+            {
+                "token": "Morgan_1",
+                "score": 0.04
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Mary",
+                "score": 0.94
+            },
+            {
+                "token": "had",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "heated",
+                "score": 0.0
+            },
+            {
+                "token": "debate",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Afterwards",
+                "score": 0.0
+            },
+            {
+                "token": "Morgan_2",
+                "score": 0.0
+            },
+            {
+                "token": "said",
+                "score": 0.0
+            },
+            {
+                "token": "to",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "9_test",
+        "highlighted_sentence": "At the bookstore , Jack and <<Cathy>> picked out some novels . Jack recommended a book to",
+        "indirect_object": "Cathy",
+        "important_tokens": [
+            {
+                "token": "Cathy",
+                "score": 0.87
+            }
+        ],
+        "original_sentence": "At the bookstore, Jack and Cathy picked out some novels. Jack recommended a book to",
+        "example_sentence": "Example 68_test: At the bookstore , Jack and <<Cathy>> picked out some novels . Jack recommended a book to {{Cathy}}\n",
+        "example_activations": "Activations: (\"Cathy\", 0.87)\n",
+        "number_of_important_tokens": 1,
+        "attention_scores": [
+            {
+                "token": "At",
+                "score": 0.0
+            },
+            {
+                "token": "the",
+                "score": 0.0
+            },
+            {
+                "token": "bookstore",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Jack_1",
+                "score": 0.03
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Cathy",
+                "score": 0.87
+            },
+            {
+                "token": "picked",
+                "score": 0.0
+            },
+            {
+                "token": "out",
+                "score": 0.0
+            },
+            {
+                "token": "some",
+                "score": 0.0
+            },
+            {
+                "token": "novels",
+                "score": 0.0
+            },
+            {
+                "token": ".",
+                "score": 0.0
+            },
+            {
+                "token": "Jack_2",
+                "score": 0.0
+            },
+            {
+                "token": "recommended",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "book",
+                "score": 0.0
+            },
+            {
+                "token": "to",
+                "score": 0.0
+            }
+        ]
+    },
+    {
+        "layer": 9,
+        "head": 6,
+        "key": "10_test",
+        "highlighted_sentence": "When <<Laura>> and <<Jay>> got a medal at the contest , <<Jay>> decided to give it to",
+        "indirect_object": "Laura",
+        "important_tokens": [
+            {
+                "token": "Laura",
+                "score": 0.62
+            },
+            {
+                "token": "Jay_1",
+                "score": 0.1
+            },
+            {
+                "token": "Jay_2",
+                "score": 0.1
+            }
+        ],
+        "original_sentence": "When Laura and Jay got a medal at the contest, Jay decided to give it to",
+        "example_sentence": "Example 22_test: When <<Laura>> and <<Jay>> got a medal at the contest , <<Jay>> decided to give it to {{Laura}}\n",
+        "example_activations": "Activations: (\"Laura\", 0.62), (\"Jay_1\", 0.1), (\"Jay_2\", 0.1)\n",
+        "number_of_important_tokens": 3,
+        "attention_scores": [
+            {
+                "token": "When",
+                "score": 0.0
+            },
+            {
+                "token": "Laura",
+                "score": 0.62
+            },
+            {
+                "token": "and",
+                "score": 0.0
+            },
+            {
+                "token": "Jay_1",
+                "score": 0.1
+            },
+            {
+                "token": "got",
+                "score": 0.0
+            },
+            {
+                "token": "a",
+                "score": 0.0
+            },
+            {
+                "token": "medal",
+                "score": 0.0
+            },
+            {
+                "token": "at",
+                "score": 0.0
+            },
+            {
+                "token": "the",
+                "score": 0.0
+            },
+            {
+                "token": "contest",
+                "score": 0.0
+            },
+            {
+                "token": ",",
+                "score": 0.0
+            },
+            {
+                "token": "Jay_2",
+                "score": 0.1
+            },
+            {
+                "token": "decided",
+                "score": 0.0
+            },
+            {
+                "token": "to_1",
+                "score": 0.0
+            },
+            {
+                "token": "give",
+                "score": 0.0
+            },
+            {
+                "token": "it",
+                "score": 0.0
+            },
+            {
+                "token": "to_2",
+                "score": 0.0
+            }
+        ]
+    }
+]

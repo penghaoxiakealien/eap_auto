@@ -1,0 +1,21 @@
+clean,corrupted,correct_token,incorrect_token,template
+Alice and Bob went to the park. Alice gave a book to Bob,Alice and Bob went to the park. Alice gave a book to Alice,Bob,Alice,ioi_simple
+John and Mary went to the park. John gave a book to Mary,John and Mary went to the park. John gave a book to John,Mary,John,ioi_simple
+Tom and Sarah went to the park. Tom gave a book to Sarah,Tom and Sarah went to the park. Tom gave a book to Tom,Sarah,Tom,ioi_simple
+Peter and Laura went to the park. Peter gave a book to Laura,Peter and Laura went to the park. Peter gave a book to Peter,Laura,Peter,ioi_simple
+David and Emma went to the park. David gave a book to Emma,David and Emma went to the park. David gave a book to David,Emma,David,ioi_simple
+Michael and Linda went to the park. Michael gave a book to Linda,Michael and Linda went to the park. Michael gave a book to Michael,Linda,Michael,ioi_simple
+James and Julia went to the park. James gave a book to Julia,James and Julia went to the park. James gave a book to James,Julia,James,ioi_simple
+Robert and Anna went to the park. Robert gave a book to Anna,Robert and Anna went to the park. Robert gave a book to Robert,Anna,Robert,ioi_simple
+Daniel and Grace went to the park. Daniel gave a book to Grace,Daniel and Grace went to the park. Daniel gave a book to Daniel,Grace,Daniel,ioi_simple
+Chris and Chloe went to the park. Chris gave a book to Chloe,Chris and Chloe went to the park. Chris gave a book to Chris,Chloe,Chris,ioi_simple
+Paul and Rachel went to the park. Paul gave a book to Rachel,Paul and Rachel went to the park. Paul gave a book to Paul,Rachel,Paul,ioi_simple
+Kevin and Sophie went to the park. Kevin gave a book to Sophie,Kevin and Sophie went to the park. Kevin gave a book to Kevin,Sophie,Kevin,ioi_simple
+George and Hannah went to the park. George gave a book to Hannah,George and Hannah went to the park. George gave a book to George,Hannah,George,ioi_simple
+Brian and Diana went to the park. Brian gave a book to Diana,Brian and Diana went to the park. Brian gave a book to Brian,Diana,Brian,ioi_simple
+Edward and Kelly went to the park. Edward gave a book to Kelly,Edward and Kelly went to the park. Edward gave a book to Edward,Kelly,Edward,ioi_simple
+Henry and Lisa went to the park. Henry gave a book to Lisa,Henry and Lisa went to the park. Henry gave a book to Henry,Lisa,Henry,ioi_simple
+Alan and Amy went to the park. Alan gave a book to Amy,Alan and Amy went to the park. Alan gave a book to Alan,Amy,Alan,ioi_simple
+Jake and Rose went to the park. Jake gave a book to Rose,Jake and Rose went to the park. Jake gave a book to Jake,Rose,Jake,ioi_simple
+Luke and Mary went to the park. Luke gave a book to Mary,Luke and Mary went to the park. Luke gave a book to Luke,Mary,Luke,ioi_simple
+Tony and Emma went to the park. Tony gave a book to Emma,Tony and Emma went to the park. Tony gave a book to Tony,Emma,Tony,ioi_simple

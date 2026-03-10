@@ -1,0 +1,12 @@
+{
+  "meta": {
+    "source_json": "/data31/private/wangziran/eap_auto/results/ioi/path_patching/standard_ioi_data.json",
+    "top_k": 2,
+    "heads": []
+  },
+  "dataset": {
+    "total_samples": 100,
+    "usable_samples": 100
+  },
+  "head_role_stats": {}
+}
