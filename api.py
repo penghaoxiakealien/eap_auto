@@ -12,8 +12,8 @@ class OpenRouter:
         self,
         model: str,
         api_key: str,
-        base_url = "https://api.key77qiqi.cn/v1/chat/completions"
-        # base_url="https://yeysai.com/v1/chat/completions",
+        # base_url = "https://api.key77qiqi.cn/v1/chat/completions"
+        base_url="https://yeysai.com/v1/chat/completions",
     ):
         self.model = model
         self.headers = {"Authorization": f"Bearer {api_key}"}

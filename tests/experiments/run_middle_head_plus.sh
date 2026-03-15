@@ -96,12 +96,14 @@ fi
 #############################################
 REPO_ROOT="/data31/private/wangziran/eap_auto"
 BASE_RESULTS_DIR="$RESULTS_ROOT"
-if [[ -n "$STANDARD_IOI_FILE" ]]; then
-    STRUCTURED_SENTENCE_FILE="$STANDARD_IOI_FILE"
-elif [[ -z "$STRUCTURED_SENTENCE_FILE" ]]; then
-    STRUCTURED_SENTENCE_FILE="$BASE_RESULTS_DIR/path_patching/structured_sentences.jsonl"
+if [[ -z "$STANDARD_IOI_FILE" ]]; then
+    STANDARD_IOI_FILE="$BASE_RESULTS_DIR/path_patching/standard_ioi_data.json"
 fi
-ATTN_SOURCE_FILE="$STRUCTURED_SENTENCE_FILE"
+if [[ -n "$STRUCTURED_SENTENCE_FILE" ]]; then
+    ATTN_SOURCE_FILE="$STRUCTURED_SENTENCE_FILE"
+else
+    ATTN_SOURCE_FILE="$STANDARD_IOI_FILE"
+fi
 head_str="${LAYER}.${HEAD}"
 if [[ -n "$TARGET_HEADS" ]]; then
     TARGET_LABEL="${TARGET_HEADS//./_}"
@@ -277,7 +279,7 @@ else
             --sender_head "$head_str" \
             --intermediate_heads "$INTERMEDIATE_HEADS" \
             --target_heads "$TARGET_HEADS" \
-            --sentences_file "$STRUCTURED_SENTENCE_FILE" \
+            --sentences_file "$ATTN_SOURCE_FILE" \
             --output_file "$MIDDLE_DIFF_FILE" \
             --attention_position "$ATTENTION_POSITION"
     else
@@ -285,7 +287,7 @@ else
             --sender_head "$head_str" \
             --intermediate_heads "$INTERMEDIATE_HEADS" \
             --target_head "$TARGET_HEAD" \
-            --sentences_file "$STRUCTURED_SENTENCE_FILE" \
+            --sentences_file "$ATTN_SOURCE_FILE" \
             --output_file "$MIDDLE_DIFF_FILE" \
             --attention_position "$ATTENTION_POSITION"
     fi
