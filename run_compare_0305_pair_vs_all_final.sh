@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0305}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0305}"
 REF_ROOT="${REF_ROOT:-${RESULTS_ROOT}/answer}"
 COMPARE_PY="${REPO_ROOT}/tests/experiments/compare_hypotheses_to_references.py"
 MODEL="${MODEL:-claude-sonnet-4-20250514-thinking}"

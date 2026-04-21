@@ -14,7 +14,7 @@ from transformer_lens import HookedTransformer, ActivationCache, utils
 from transformer_lens.hook_points import HookPoint
 from ioi_dataset import IOIDataset
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 def load_model(device: str = "cuda"):
@@ -153,8 +153,8 @@ def analyze_single_sentence_effects(
 
 def main():
     parser = argparse.ArgumentParser(description="分析单个头patching后的logit变化 (V3-Final)")
-    parser.add_argument("--input_file", type=str, default="/data31/private/wangziran/eap_auto/results/ioi/path_patching/standard_ioi_data.json", help="标准IOI数据文件")
-    parser.add_argument("--output_dir", type=str, default="/data31/private/wangziran/eap_auto/results/ioi/path_patching/NMH", help="输出目录")
+    parser.add_argument("--input_file", type=str, default="/home/wangziran/eap_auto/results/ioi/path_patching/standard_ioi_data.json", help="标准IOI数据文件")
+    parser.add_argument("--output_dir", type=str, default="/home/wangziran/eap_auto/results/ioi/path_patching/NMH", help="输出目录")
     parser.add_argument("--head_to_patch", type=str, default="9.6", help="要patch的头 (格式: layer.head)")
     parser.add_argument("--max_samples", type=int, default=0, help="处理的最大样本数；<=0 表示使用全部样本")
     parser.add_argument("--verbose", action="store_true", help="显示详细信息")

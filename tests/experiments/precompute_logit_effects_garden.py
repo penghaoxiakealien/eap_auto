@@ -15,7 +15,7 @@ from typing import Optional, Tuple
 import torch as t
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from transformer_lens import ActivationCache, HookedTransformer, utils
+from transformer_lens import ActivationCache, HookedTransformer, utils, loading_from_pretrained as loading
 from transformer_lens.hook_points import HookPoint
 
 from garden_dataset import GardenDataset
@@ -34,19 +34,35 @@ def patch_or_freeze_head_vectors(
     return act
 
 
+def load_local_hooked_transformer(local_model_dir: str, device: t.device) -> HookedTransformer:
+    tokenizer = AutoTokenizer.from_pretrained(str(local_model_dir), local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(str(local_model_dir), local_files_only=True)
+    cfg = loading.get_pretrained_model_config(
+        str(local_model_dir),
+        device=device,
+        local_files_only=True,
+    )
+    model = HookedTransformer(
+        cfg,
+        tokenizer=tokenizer,
+        move_to_device=False,
+    )
+    state_dict = loading.get_pretrained_state_dict(
+        str(local_model_dir),
+        cfg,
+        hf_model=hf_model,
+        local_files_only=True,
+    )
+    model.load_and_process_state_dict(state_dict)
+    model.move_model_modules_to_device()
+    return model
+
+
 def load_model(model_name: str, model_path: Optional[Path], device: t.device) -> HookedTransformer:
-    official_name = model_name if model_name != "gpt2-small" else "gpt2"
     if model_path:
-        tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
-        hf_model = AutoModelForCausalLM.from_pretrained(str(model_path), local_files_only=True)
-        model = HookedTransformer.from_pretrained(
-            official_name,
-            device=device,
-            tokenizer=tokenizer,
-            hf_model=hf_model,
-            local_files_only=True,
-        )
+        model = load_local_hooked_transformer(model_path, device)
     else:
+        official_name = model_name if model_name != "gpt2-small" else "gpt2"
         model = HookedTransformer.from_pretrained(official_name, device=device)
     model.cfg.use_split_qkv_input = True
     model.cfg.use_attn_result = True

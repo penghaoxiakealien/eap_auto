@@ -6,7 +6,7 @@ from functools import partial
 import sys
 
 # 依赖项与路径设置
-sys.path.append("/data31/private/wangziran/eap_auto/") 
+sys.path.append("/home/wangziran/eap_auto/") 
 from tests.experiments.ioi_dataset import IOIDataset
 from transformer_lens import HookedTransformer, utils
 import einops

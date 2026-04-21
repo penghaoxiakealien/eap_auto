@@ -19,7 +19,7 @@ except LookupError:
     nltk.download('punkt')
     print("下载完成。")
     
-sys.path.append("/data31/private/wangziran/eap_auto/")
+sys.path.append("/home/wangziran/eap_auto/")
 from api import OpenRouter
 from summarize_receiver_heads import summarize_head_group
 

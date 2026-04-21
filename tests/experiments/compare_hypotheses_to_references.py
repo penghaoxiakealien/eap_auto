@@ -403,7 +403,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LLM-based similarity scoring against reference answers.")
     parser.add_argument(
         "--results-root",
-        default="/data31/private/wangziran/eap_auto/results/ioi_0126",
+        default="/home/wangziran/eap_auto/results/ioi_0126",
         help="Root directory containing answer/ and hypothesis/ subfolders.",
     )
     parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model name.")

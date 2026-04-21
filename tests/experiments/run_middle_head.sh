@@ -9,7 +9,7 @@ HEAD=1
 RECEIVER_HEADS="5.5"
 ROUNDS=5
 CONDA_ENV="eap-ig"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/ioi"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/ioi"
 STRUCTURED_SENTENCE_FILE=""
 STANDARD_IOI_FILE=""
 ATTENTION_POSITION="end"
@@ -88,7 +88,7 @@ fi
 #############################################
 # 路径设定
 #############################################
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 BASE_RESULTS_DIR="$RESULTS_ROOT"
 if [[ -z "$STANDARD_IOI_FILE" ]]; then
     STANDARD_IOI_FILE="$BASE_RESULTS_DIR/path_patching/standard_ioi_data.json"
@@ -128,8 +128,8 @@ TEST_RESULT_FILE="$OUTPUT_DIR/test_results.json"
 CONDA_BASE="/home/wangziran/miniconda3"
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
 conda activate "${CONDA_ENV}"
-mkdir -p /data31/private/wangziran/tmp
-export TMPDIR=/data31/private/wangziran/tmp
+mkdir -p /tmp
+export TMPDIR=/tmp
 mkdir -p "$DATA_SOURCE_DIR" "$OUTPUT_DIR"
 
 #############################################

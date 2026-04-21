@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/ioi_0209"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/ioi_0209"
 
 TS="$(date +%Y%m%d_%H%M)"
 

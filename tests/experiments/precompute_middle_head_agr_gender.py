@@ -38,7 +38,7 @@ from transformer_lens import HookedTransformer, ActivationCache, utils
 from transformer_lens.hook_points import HookPoint
 
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 def load_model(device: str = "cuda") -> HookedTransformer:

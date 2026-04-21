@@ -15,7 +15,7 @@ TARGET_HEADS=""
 ROUNDS=5
 TYPENAME="middle_head_agr_gender"
 CONDA_ENV="eap-ig"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/agr_gender"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/agr_gender"
 STANDARD_JSON=""
 ATTENTION_POSITION="end"
 RECEIVER_DESC_FILES=""
@@ -85,7 +85,7 @@ if [[ -z "${RECEIVER_HEADS}" ]]; then
   exit 1
 fi
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 BASE_RESULTS_DIR="$RESULTS_ROOT"
 if [[ -z "$STANDARD_JSON" ]]; then
   STANDARD_JSON="$BASE_RESULTS_DIR/standard_gender_data.json"

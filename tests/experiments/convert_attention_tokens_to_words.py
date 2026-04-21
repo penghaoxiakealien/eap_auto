@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple
 from transformers import GPT2TokenizerFast
 
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 def load_tokenizer() -> GPT2TokenizerFast:

@@ -66,10 +66,23 @@ def load_graph(path: Path) -> Tuple[List[str], List[Tuple[str, str]]]:
         nodes = [n for n, info in nodes.items() if (info or {}).get("in_graph", False)]
     if not isinstance(nodes, list):
         raise ValueError("graph-json nodes 格式不正确")
-    edges = data.get("edge_list") or data.get("edges") or []
-    if not isinstance(edges, list):
-        raise ValueError("graph-json edge_list 格式不正确")
-    return nodes, [(a, b) for a, b in edges]
+    edges_obj = data.get("edge_list") or data.get("edges") or []
+    if isinstance(edges_obj, list):
+
+        return nodes, [(a, b) for a, b in edges_obj]
+    if isinstance(edges_obj, dict):
+        edge_list: List[Tuple[str, str]] = []
+        for _name, info in edges_obj.items():
+            if not isinstance(info, dict):
+                continue
+            if not info.get("in_graph", False):
+                continue
+            parent = info.get("parent")
+            child = info.get("child")
+            if isinstance(parent, str) and isinstance(child, str):
+                edge_list.append((parent, child))
+        return nodes, edge_list
+    raise ValueError("graph-json edge_list 格式不正确")
 
 
 def head_key(node_name: str) -> str:

@@ -10,7 +10,7 @@ Example:
     python generate_ioi_structured_sentences.py \
         --count 50 \
         --output ../../results/ioi/path_patching/structured_sentences_standard.jsonl \
-        --tokenizer-path /data31/private/wangziran/eap-ig/gpt2
+        --tokenizer-path /home/wangziran/gpt2
 """
 
 from __future__ import annotations

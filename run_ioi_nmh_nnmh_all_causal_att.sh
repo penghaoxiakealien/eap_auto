@@ -5,8 +5,8 @@ set -euo pipefail
 # Phase A: 先跑 NMH 9.6/9.9/10.0 的 _all（dual）任务（供 SIH/DTH 依赖）。
 # Phase B: 再跑 NMH/NNMH 的其余任务。
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0301}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0301}"
 RUN_NMH="${REPO_ROOT}/tests/experiments/run_NMH_val_size_x2.sh"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M)}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-5}"

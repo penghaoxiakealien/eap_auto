@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# filepath: /data31/private/wangziran/eap_auto/run_eap_head_classification.sh
+# filepath: /home/wangziran/eap_auto/run_eap_head_classification.sh
 set -euo pipefail
 
 # === 路径与参数（按需修改）===
-PROJECT_ROOT="/data31/private/wangziran/eap_auto"
+PROJECT_ROOT="/home/wangziran/eap_auto"
 OUTPUT_DIR="${PROJECT_ROOT}/results/ioi_gpt2_800"
 IOI_JSON="${PROJECT_ROOT}/results/ioi/path_patching/standard_ioi_data.json"   # classify 的 IOI 样本
 DATASET_CSV="${PROJECT_ROOT}/ioi_gpt2.csv"                                   # run_ioi_gpt2 的数据

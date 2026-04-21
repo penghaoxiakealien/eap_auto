@@ -367,12 +367,12 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Export IOI hypothesis+LLM-compare summary table.")
     p.add_argument(
         "--results-root",
-        default="/data31/private/wangziran/eap_auto/results/ioi_0301",
+        default="/home/wangziran/eap_auto/results/ioi_0301",
         help="Root with hypothesis/ subdir.",
     )
     p.add_argument(
         "--reference-root",
-        default="/data31/private/wangziran/eap_auto/results/ioi_0126/answer",
+        default="/home/wangziran/eap_auto/results/ioi_0126/answer",
         help="Directory containing NMH.txt/NNMH.txt/SIH.txt/DTH.txt.",
     )
     p.add_argument(

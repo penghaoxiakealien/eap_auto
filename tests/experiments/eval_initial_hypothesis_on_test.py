@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate initial hypothesis on the same test set as final test_results.json.")
     p.add_argument(
         "--results-root",
-        default="/data31/private/wangziran/eap_auto/results/ioi_0304",
+        default="/home/wangziran/eap_auto/results/ioi_0304",
         help="Root containing hypothesis/...",
     )
     p.add_argument(

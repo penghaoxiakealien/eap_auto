@@ -10,8 +10,9 @@ RECEIVER_HEADS="10.7"
 ROUNDS=5
 TYPENAME="garden_middle_head"
 CONDA_ENV="eap-ig"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/garden/garden_npz_v_trans_mod_run"
-STANDARD_GARDEN_JSON="/data31/private/wangziran/eap_auto/results/garden/standard_garden_data.json"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/garden/garden_npz_v_trans_mod_run"
+STANDARD_GARDEN_JSON="/home/wangziran/eap_auto/results/garden/standard_garden_data.json"
+MODEL="gpt-5.2-2025-12-11"
 ATTENTION_POSITION="end"
 RECEIVER_ATTENTION_POSITION=""
 RECEIVER_DESC_FILES=""
@@ -27,6 +28,10 @@ RECEIVER_INPUTS="q,k,v"
 RECEIVER_GROUP_ID=""
 RECEIVER_GROUP_SIGNATURE=""
 RECEIVER_GROUP_HEADS=""
+MAX_SAMPLES=300
+VALIDATE_EVERY=2
+VALIDATION_SAMPLE_SIZE=25
+TEST_SAMPLE_SIZE=50
 
 usage() {
   cat <<'EOF'
@@ -39,6 +44,7 @@ Usage: run_middle_head_garden.sh [options]
   --conda-env NAME          Conda env (default: eap-ig)
   --results-root PATH       Results root (default: garden run dir)
   --standard-json PATH      standard_garden_data.json path
+  --model NAME              OpenRouter model (default: gpt-5.2-2025-12-11)
   --attention-position POS  Attention row (default: end)
   --receiver-attention-position POS  Receiver query position for diff vectors (default: attention-position)
   --receiver-desc FILES     head:path,head:path receiver descriptions
@@ -48,6 +54,10 @@ Usage: run_middle_head_garden.sh [options]
   --top-k N                 Top-k tokens for preprocessed_attention_scores (default: 2)
   --attention-batch-size N  Batch size for raw attention (default: 1)
   --strict-attention-align  Convert attention tokens to strict word-level tokens
+  --max-samples N         Max garden samples to use (default: 300)
+  --validate-every N      Validation cadence for auto_middle (default: 2)
+  --validation-sample-size N  Validation sample size (default: 25)
+  --test-sample-size N    Test sample size (default: 50)
   --intermediate-heads LIST Comma-separated intermediate heads (A->B->C)
   --target-head H           Target head for A->B->C
   --receiver-inputs LIST    Receiver inputs to patch (default: q,k,v)
@@ -68,6 +78,7 @@ while [[ $# -gt 0 ]]; do
     --conda-env) CONDA_ENV="$2"; shift 2 ;;
     --results-root) RESULTS_ROOT="$2"; shift 2 ;;
     --standard-json) STANDARD_GARDEN_JSON="$2"; shift 2 ;;
+    --model) MODEL="$2"; shift 2 ;;
     --attention-position) ATTENTION_POSITION="$2"; shift 2 ;;
     --receiver-attention-position) RECEIVER_ATTENTION_POSITION="$2"; shift 2 ;;
     --receiver-desc) RECEIVER_DESC_FILES="$2"; shift 2 ;;
@@ -77,6 +88,10 @@ while [[ $# -gt 0 ]]; do
     --top-k) TOP_K="$2"; shift 2 ;;
     --attention-batch-size) ATTN_BATCH_SIZE="$2"; shift 2 ;;
     --strict-attention-align) STRICT_ALIGN=1; shift 1 ;;
+    --max-samples) MAX_SAMPLES="$2"; shift 2 ;;
+    --validate-every) VALIDATE_EVERY="$2"; shift 2 ;;
+    --validation-sample-size) VALIDATION_SAMPLE_SIZE="$2"; shift 2 ;;
+    --test-sample-size) TEST_SAMPLE_SIZE="$2"; shift 2 ;;
     --intermediate-heads) INTERMEDIATE_HEADS="$2"; shift 2 ;;
     --target-head) TARGET_HEAD="$2"; shift 2 ;;
     --receiver-inputs) RECEIVER_INPUTS="$2"; shift 2 ;;
@@ -88,7 +103,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 SCRIPT_PATH="$REPO_ROOT/tests/experiments/garden/auto_middle.py"
 
 if [[ -n "$OUTPUT_DIR_OVERRIDE" ]]; then
@@ -139,7 +154,8 @@ python "$REPO_ROOT/tests/experiments/precompute_attention_scores_garden.py" \
   --output-file "$RAW_ATTENTION_FILE" \
   --head "$head_str" \
   --batch-size "$ATTN_BATCH_SIZE" \
-  --attention-position "$ATTENTION_POSITION"
+  --attention-position "$ATTENTION_POSITION" \
+  --max-samples "$MAX_SAMPLES"
 
 echo "=== Step 2: raw -> preprocessed_for_sampling.jsonl ==="
 python - "$RAW_ATTENTION_FILE" "$PREPROCESSED_SAMPLING_FILE" <<'PY'
@@ -256,7 +272,8 @@ if [[ -n "$INTERMEDIATE_HEADS" && -n "$TARGET_HEAD" ]]; then
     --target_head "$TARGET_HEAD" \
     --standard-json "$STANDARD_GARDEN_JSON" \
     --output_file "$MIDDLE_DIFF_FILE" \
-    --attention_position "${RECEIVER_ATTENTION_POSITION:-$ATTENTION_POSITION}"
+    --attention_position "${RECEIVER_ATTENTION_POSITION:-$ATTENTION_POSITION}" \
+    --max-samples "$MAX_SAMPLES"
 else
   python "$REPO_ROOT/tests/experiments/precompute_middle_head_garden.py" \
     --sender_head "$head_str" \
@@ -264,7 +281,8 @@ else
     --standard-json "$STANDARD_GARDEN_JSON" \
     --output_file "$MIDDLE_DIFF_FILE" \
     --receiver-attention-position "${RECEIVER_ATTENTION_POSITION:-$ATTENTION_POSITION}" \
-    --receiver-inputs "$RECEIVER_INPUTS"
+    --receiver-inputs "$RECEIVER_INPUTS" \
+    --max-samples "$MAX_SAMPLES"
 fi
 
 RECEIVER_DESC_ARG=()
@@ -280,5 +298,9 @@ python "$SCRIPT_PATH" \
   --typename "$TYPENAME" \
   --output_dir "$OUTPUT_DIR" \
   --data-source-dir "$DATA_SOURCE_DIR" \
+  --model "$MODEL" \
+  --validate-every "$VALIDATE_EVERY" \
+  --validation-sample-size "$VALIDATION_SAMPLE_SIZE" \
+  --test-sample-size "$TEST_SAMPLE_SIZE" \
   --receiver_heads "${TARGET_HEAD:-$RECEIVER_HEADS}" \
   "${RECEIVER_DESC_ARG[@]}"

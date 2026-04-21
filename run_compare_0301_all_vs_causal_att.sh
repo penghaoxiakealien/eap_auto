@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0301}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0301}"
 COMPARE_PY="${REPO_ROOT}/tests/experiments/compare_hypotheses_to_references.py"
 REFERENCE_ROOT="${REFERENCE_ROOT:-${RESULTS_ROOT}/answer}"
 
@@ -16,7 +16,7 @@ fi
 
 # ioi_0301 通常没有 answer 目录，默认回退到 ioi_0126 的标准答案目录。
 if [[ ! -d "$REFERENCE_ROOT" ]]; then
-  FALLBACK_REF="/data31/private/wangziran/eap_auto/results/ioi_0126/answer"
+  FALLBACK_REF="/home/wangziran/eap_auto/results/ioi_0126/answer"
   if [[ -d "$FALLBACK_REF" ]]; then
     REFERENCE_ROOT="$FALLBACK_REF"
   fi

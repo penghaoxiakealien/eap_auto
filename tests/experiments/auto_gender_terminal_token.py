@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Tuple
 
 import sys
 
-sys.path.append("/data31/private/wangziran/eap_auto/")
+sys.path.append("/home/wangziran/eap_auto/")
 from api import OpenRouter
 
 

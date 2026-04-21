@@ -12,7 +12,7 @@ from nltk.tokenize import word_tokenize
 # nltk.download('punkt_tab')
 from collections import defaultdict
 import argparse
-sys.path.append("/data31/private/wangziran/eap_auto/")
+sys.path.append("/home/wangziran/eap_auto/")
 # sys.path.append("/data63/private/chensiyuan/EAP-IG/")
 from api import OpenRouter
 from attention_score_by_head import run
@@ -878,7 +878,7 @@ def extract_predicted_attention(predicted_attention, real_attention):
 
 
 def calculate_logit_contribution(layer, head, example_sentences, 
-                               precomputed_file="/data31/private/wangziran/eap_auto/results/ioi/path_patching/heads_direct_effect_on_logit_difference.json"):
+                               precomputed_file="/home/wangziran/eap_auto/results/ioi/path_patching/heads_direct_effect_on_logit_difference.json"):
     """从预计算文件中获取注意力头对logit差异的贡献（保留原始符号）"""
     
     try:

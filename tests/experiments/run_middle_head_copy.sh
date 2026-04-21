@@ -10,12 +10,12 @@ RECEIVER_HEADS="6.9"
 ROUNDS=1
 CONDA_ENV="eap-ig"
 # 可选：为下游头提供描述（格式 head:path,head:path）
-RECEIVER_DESC_FILES="6.9:/data31/private/wangziran/eap_auto/results/ioi/hypothesis/Middle_Head/6.9_20251117_0912/final_result_round_1.json"
+RECEIVER_DESC_FILES="6.9:/home/wangziran/eap_auto/results/ioi/hypothesis/Middle_Head/6.9_20251117_0912/final_result_round_1.json"
 
 #############################################
 # 路径设定
 #############################################
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 BASE_RESULTS_DIR="$REPO_ROOT/results/ioi"
 STRUCTURED_SENTENCE_FILE="$BASE_RESULTS_DIR/path_patching/structured_sentences.jsonl"
 ATTN_SOURCE_FILE="$STRUCTURED_SENTENCE_FILE"
@@ -39,8 +39,8 @@ BEST_SUMMARY_FILE="$OUTPUT_DIR/best_hypothesis.json"
 CONDA_BASE="/home/wangziran/miniconda3"
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
 conda activate "${CONDA_ENV}"
-mkdir -p /data31/private/wangziran/tmp
-export TMPDIR=/data31/private/wangziran/tmp
+mkdir -p /tmp
+export TMPDIR=/tmp
 mkdir -p "$DATA_SOURCE_DIR" "$OUTPUT_DIR"
 
 #############################################

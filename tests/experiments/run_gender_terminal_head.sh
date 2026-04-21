@@ -6,7 +6,7 @@ HEAD=0
 ROUNDS=5
 TYPENAME="gender_terminal_head"
 CONDA_ENV="eap-ig"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/agr_gender"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/agr_gender"
 STANDARD_JSON=""
 ATTENTION_POSITION="end"
 DATA_DIR_OVERRIDE=""
@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 BASE_RESULTS_DIR="$RESULTS_ROOT"
 if [[ -z "$STANDARD_JSON" ]]; then
   STANDARD_JSON="$BASE_RESULTS_DIR/standard_gender_data.json"

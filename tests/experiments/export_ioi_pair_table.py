@@ -257,8 +257,8 @@ def write_xlsx(rows: List[Dict[str, object]], out_xlsx: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Export pair-comparison summary table.")
-    p.add_argument("--results-root", default="/data31/private/wangziran/eap_auto/results/ioi_0305")
-    p.add_argument("--reference-root", default="/data31/private/wangziran/eap_auto/results/ioi_0305/answer")
+    p.add_argument("--results-root", default="/home/wangziran/eap_auto/results/ioi_0305")
+    p.add_argument("--reference-root", default="/home/wangziran/eap_auto/results/ioi_0305/answer")
     p.add_argument("--out-csv", default="")
     p.add_argument("--out-xlsx", default="")
     return p.parse_args()

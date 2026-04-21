@@ -5,7 +5,7 @@ import re
 import sys
 
 # 确保可以导入项目中的其他模块
-sys.path.append("/data31/private/wangziran/eap_auto/") 
+sys.path.append("/home/wangziran/eap_auto/") 
 from api import OpenRouter
 
 def initialize_openrouter(model: str = "gpt-4o"):

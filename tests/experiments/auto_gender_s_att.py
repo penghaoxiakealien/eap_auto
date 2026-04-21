@@ -9,7 +9,7 @@ from collections import defaultdict
 import argparse
 from typing import Dict
 
-sys.path.append("/data31/private/wangziran/eap_auto/")
+sys.path.append("/home/wangziran/eap_auto/")
 from api import OpenRouter
 
 

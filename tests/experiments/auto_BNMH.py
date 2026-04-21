@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Tuple
 import nltk
 
 # 确保可以导入api模块
-sys.path.append("/data31/private/wangziran/eap_auto/")
+sys.path.append("/home/wangziran/eap_auto/")
 from api import OpenRouter
 from nltk.tokenize import word_tokenize
 

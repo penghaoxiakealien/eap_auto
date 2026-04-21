@@ -10,18 +10,43 @@ import torch
 import einops
 from tqdm import tqdm
 
-from transformer_lens import HookedTransformer, utils
+from transformer_lens import HookedTransformer, utils, loading_from_pretrained as loading
 from transformer_lens.hook_points import HookPoint
 from transformer_lens import ActivationCache
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from ioi_dataset import IOIDataset
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
+
+
+def load_local_hooked_transformer(local_model_dir: str, device: str = "cuda"):
+    tokenizer = AutoTokenizer.from_pretrained(local_model_dir, local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(local_model_dir, local_files_only=True)
+    cfg = loading.get_pretrained_model_config(
+        local_model_dir,
+        device=device,
+        local_files_only=True,
+    )
+    model = HookedTransformer(
+        cfg,
+        tokenizer=tokenizer,
+        move_to_device=False,
+    )
+    state_dict = loading.get_pretrained_state_dict(
+        local_model_dir,
+        cfg,
+        hf_model=hf_model,
+        local_files_only=True,
+    )
+    model.load_and_process_state_dict(state_dict)
+    model.move_model_modules_to_device()
+    return model
 
 
 def load_model(device: str = "cuda"):
     if os.path.isdir(LOCAL_MODEL_DIR):
         print(f"🔥 正在从本地缓存加载模型: {LOCAL_MODEL_DIR}")
-        return HookedTransformer.from_pretrained("gpt2", device=device, cache_dir=LOCAL_MODEL_DIR)
+        return load_local_hooked_transformer(LOCAL_MODEL_DIR, device=device)
     print("⚠️ 未找到本地模型目录，回退到默认的 gpt2-small。")
     return HookedTransformer.from_pretrained("gpt2-small", device=device)
 
@@ -266,7 +291,7 @@ def main():
     parser = argparse.ArgumentParser(description="Precompute sender->receiver diff vectors for middle heads.")
     parser.add_argument("--sender_head", required=True, help="Sender head formatted as L.H (e.g., 10.6).")
     parser.add_argument("--receiver_heads", required=True, help="Comma separated receiver heads, e.g., 10.7,11.10.")
-    parser.add_argument("--sentences_file", type=str, default="/data31/private/wangziran/eap_auto/results/ioi/path_patching/structured_sentences.jsonl", help="Structured sentences JSONL.")
+    parser.add_argument("--sentences_file", type=str, default="/home/wangziran/eap_auto/results/ioi/path_patching/structured_sentences.jsonl", help="Structured sentences JSONL.")
     parser.add_argument("--attention_position", type=str, default="end", help="Row of attention pattern to evaluate (e.g., end, s2).")
     parser.add_argument("--output_file", required=True, help="Path to write the diff dataset JSON.")
     args = parser.parse_args()

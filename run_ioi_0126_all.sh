@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/ioi_0126"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/ioi_0126"
 
 RUN_NMH="$REPO_ROOT/tests/experiments/run_NMH.sh"
 RUN_MIDDLE="$REPO_ROOT/tests/experiments/run_middle_head.sh"

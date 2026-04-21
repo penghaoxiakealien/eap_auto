@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
 
-REPO_ROOT = Path("/data31/private/wangziran/eap_auto")
+REPO_ROOT = Path("/home/wangziran/eap_auto")
 
 
 def parse_args() -> argparse.Namespace:

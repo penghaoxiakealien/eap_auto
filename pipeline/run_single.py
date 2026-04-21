@@ -20,7 +20,7 @@ import argparse
 import traceback
 
 # Prefer eap-ig implementation for evaluate_circuit_ratio/f.
-EAP_ROOT = os.environ.get("EAP_ROOT", "/data31/private/wangziran/eap-ig")
+EAP_ROOT = os.environ.get("EAP_ROOT", "/home/wangziran/eap-ig")
 if Path(EAP_ROOT).exists():
     sys.path.insert(0, EAP_ROOT)
 
@@ -285,7 +285,7 @@ def run_sv_agreement_analysis(data_file, output_dir, n_nodes_value: int):
     print("正在加载模型...")
     load_start = time.time()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    local_path = "/data31/private/wangziran/eap-ig/gpt2"
+    local_path = "/home/wangziran/gpt2"
     try:
         hf_model = GPT2LMHeadModel.from_pretrained(local_path)
         tokenizer = GPT2Tokenizer.from_pretrained(local_path)

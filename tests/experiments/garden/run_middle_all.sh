@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 RESULTS_ROOT="${REPO_ROOT}/results/garden/garden_npz_v_trans_mod_run"
 GROUP_GRAPH_JSON="${RESULTS_ROOT}/analysis/group_graph_thr75_dagish.json"
 STANDARD_JSON="${REPO_ROOT}/results/garden/standard_garden_data.json"

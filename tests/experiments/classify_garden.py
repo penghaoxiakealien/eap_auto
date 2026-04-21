@@ -15,7 +15,7 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from transformer_lens import HookedTransformer
+from transformer_lens import HookedTransformer, loading_from_pretrained as loading
 import torch
 
 
@@ -83,14 +83,25 @@ def _load_model(model_name: str, model_path: Optional[Path], device: str) -> Hoo
     if model_path:
         tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
         hf_model = AutoModelForCausalLM.from_pretrained(str(model_path), local_files_only=True)
-        official_name = model_name if model_name != "gpt2-small" else "gpt2"
-        return HookedTransformer.from_pretrained(
-            official_name,
+        cfg = loading.get_pretrained_model_config(
+            str(model_path),
             device=device,
+            local_files_only=True,
+        )
+        model = HookedTransformer(
+            cfg,
             tokenizer=tokenizer,
+            move_to_device=False,
+        )
+        state_dict = loading.get_pretrained_state_dict(
+            str(model_path),
+            cfg,
             hf_model=hf_model,
             local_files_only=True,
         )
+        model.load_and_process_state_dict(state_dict)
+        model.move_model_modules_to_device()
+        return model
     candidates = [model_name]
     if model_name == "gpt2-small":
         candidates.append("gpt2")

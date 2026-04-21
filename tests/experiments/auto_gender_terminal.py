@@ -31,7 +31,7 @@ sys_path_added = False
 try:
     import sys
 
-    sys.path.append("/data31/private/wangziran/eap_auto/")
+    sys.path.append("/home/wangziran/eap_auto/")
     sys_path_added = True
 except Exception:
     pass

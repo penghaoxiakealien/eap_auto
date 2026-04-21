@@ -23,7 +23,7 @@ from transformer_lens.hook_points import HookPoint
 from transformer_lens import ActivationCache
 
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 def load_model(device: str = "cuda"):
@@ -281,6 +281,12 @@ def main():
         default="q,k,v",
         help="Comma separated receiver inputs to patch (default: q,k,v).",
     )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=0,
+        help="Limit samples from standard_garden_data.json (0 means all).",
+    )
     parser.add_argument("--output_file", required=True, help="Path to write the diff dataset JSON.")
     args = parser.parse_args()
 
@@ -292,6 +298,8 @@ def main():
     print(f"Sender head: {sender_head}, receivers: {receiver_heads}")
 
     records = load_standard_garden(Path(args.standard_json))
+    if args.max_samples and args.max_samples > 0:
+        records = records[: args.max_samples]
     print(f"Loaded {len(records)} samples from {args.standard_json}")
 
     model = load_model()

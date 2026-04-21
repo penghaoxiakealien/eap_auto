@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Batch 1: NNMH missing tasks
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0305}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0305}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-5}"
 RUN_NMH="${REPO_ROOT}/tests/experiments/run_NMH_val_size_x2.sh"

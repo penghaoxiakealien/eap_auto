@@ -32,7 +32,7 @@ def run_with_n_edges(n_edges_value, data_file, output_dir, script_path=None):
         start_time = time.time()
         # 使用 Popen 以便更好地控制和捕获输出
         env = os.environ.copy()
-        env.setdefault("EAP_ROOT", "/data31/private/wangziran/eap-ig")
+        env.setdefault("EAP_ROOT", "/home/wangziran/eap-ig")
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -352,10 +352,10 @@ def plot_results(df, output_dir, phase="initial", baseline_accuracy=None, baseli
 def main():
     parser = argparse.ArgumentParser(description="自动寻找最佳保留边数")
     parser.add_argument('--data_file', type=str, 
-                      default="/data31/private/wangziran/eap_auto/datasets/garden/garden_npz_v_trans_mod.csv",
+                      default="/home/wangziran/eap_auto/datasets/garden/garden_npz_v_trans_mod.csv",
                       help='数据集路径')
     parser.add_argument('--output_dir', type=str, 
-                      default="/data31/private/wangziran/eap_auto/results/garden_search",
+                      default="/home/wangziran/eap_auto/results/garden_search",
                       help='输出目录')
     parser.add_argument('--script_path', type=str, 
                       default=None, 

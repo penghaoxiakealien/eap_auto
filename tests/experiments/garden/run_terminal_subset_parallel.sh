@@ -20,10 +20,10 @@ EOF
 
 HEADS_FILE=""
 GROUP_HEADS_FILE=""
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/garden/garden_npz_v_trans_mod_run"
-DATA_PATH="/data31/private/wangziran/eap_auto/datasets/garden/garden_npz_v_trans_mod.csv"
-STANDARD_JSON="/data31/private/wangziran/eap_auto/results/garden/standard_garden_data.json"
-MODEL_PATH="/data31/private/wangziran/eap-ig/gpt2"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/garden/garden_npz_v_trans_mod_run"
+DATA_PATH="/home/wangziran/eap_auto/datasets/garden/garden_npz_v_trans_mod.csv"
+STANDARD_JSON="/home/wangziran/eap_auto/results/garden/standard_garden_data.json"
+MODEL_PATH="/home/wangziran/gpt2"
 ROUNDS=5
 MAX_PARALLEL=3
 CUDA_DEVICES="7"
@@ -62,7 +62,7 @@ if [[ -n "$GROUP_HEADS_FILE" && ! -f "$GROUP_HEADS_FILE" ]]; then
   exit 1
 fi
 
-RUN_SCRIPT="/data31/private/wangziran/eap_auto/tests/experiments/run_terminal_garden.sh"
+RUN_SCRIPT="/home/wangziran/eap_auto/tests/experiments/run_terminal_garden.sh"
 
 TMP_LIST="$(mktemp /tmp/terminal_heads_to_run.XXXXXX)"
 trap 'rm -f "$TMP_LIST"' EXIT

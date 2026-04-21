@@ -8,12 +8,13 @@ LAYER=10
 HEAD=0
 ROUNDS=1
 CONDA_ENV="eap-ig"
-RESULTS_ROOT="/data31/private/wangziran/eap_auto/results/ioi"
+RESULTS_ROOT="/home/wangziran/eap_auto/results/ioi"
 STANDARD_IOI_FILE=""
 TASK_PREFIX="NMH"
 OUTPUT_FAMILY="Name_Mover_Head"
 DATA_DIR_OVERRIDE=""
 OUTPUT_DIR_OVERRIDE=""
+MODEL="gpt-5-chat"
 OPTIMIZE_ONLY="dual"
 VALIDATE_EVERY=2
 VALIDATION_SAMPLE_SIZE=0
@@ -27,12 +28,13 @@ usage() {
   --head H              指定头号 (默认: 0)
   --rounds N            仅用于结果文件命名（训练固定 10 epoch）
   --conda-env NAME      Conda 环境 (默认: eap-ig)
-  --results-root PATH   结果根目录 (默认: /data31/private/wangziran/eap_auto/results/ioi)
+  --results-root PATH   结果根目录 (默认: /home/wangziran/eap_auto/results/ioi)
   --standard-file PATH  standard_ioi_data.json 的路径；未提供则使用 results-root 默认位置
   --task-prefix NAME    path_patching 子目录前缀 (默认: NMH)
   --output-family NAME  hypothesis 子目录名 (默认: Name_Mover_Head)
   --output-dir PATH     指定输出目录（默认自动时间戳）
   --data-dir PATH       指定 path_patching 数据目录
+  --model NAME          OpenRouter 模型名 (默认: gpt-5-chat)
   --optimize-only MODE  精炼阶段仅使用 causal/attention/dual
   --validate-every N    每 N 轮做一次 validation (默认: 2)
   --validation-sample-size N  每次 validation 使用句子数（0=全量 validation 集）
@@ -87,6 +89,10 @@ while [[ $# -gt 0 ]]; do
             DATA_DIR_OVERRIDE="$2"
             shift 2
             ;;
+        --model)
+            MODEL="$2"
+            shift 2
+            ;;
         --optimize-only)
             OPTIMIZE_ONLY="$2"
             shift 2
@@ -122,7 +128,7 @@ done
 #############################################
 # 路径设定
 #############################################
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 SCRIPT_PATH="$REPO_ROOT/tests/experiments/auto_NMH.py"
 BASE_RESULTS_DIR="$RESULTS_ROOT"
 if [[ -n "$DATA_DIR_OVERRIDE" ]]; then
@@ -154,8 +160,8 @@ TEST_RESULT_FILE="$OUTPUT_DIR/test_results.json"
 CONDA_BASE="/home/wangziran/miniconda3"
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
 conda activate "${CONDA_ENV}"
-mkdir -p /data31/private/wangziran/tmp
-export TMPDIR=/data31/private/wangziran/tmp
+mkdir -p /tmp
+export TMPDIR=/tmp
 mkdir -p "$DATA_SOURCE_DIR" "$OUTPUT_DIR"
 
 head_str="${LAYER}.${HEAD}"
@@ -256,6 +262,7 @@ python "$SCRIPT_PATH" \
   --layer "$LAYER" \
   --head "$HEAD" \
   --rounds "$ROUNDS" \
+  --model "$MODEL" \
   --output_dir "$OUTPUT_DIR" \
   --data_source_dir "$DATA_SOURCE_DIR" \
   --optimize-only "$OPTIMIZE_ONLY" \

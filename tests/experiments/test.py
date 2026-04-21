@@ -129,7 +129,7 @@ def main():
     model = HookedTransformer.from_pretrained("gpt2-small", device="cuda")
     
     # 加载一些句子进行测试
-    input_file = "/data31/private/wangziran/eap_auto/results/ioi/path_patching/structured_sentences.jsonl"
+    input_file = "/home/wangziran/eap_auto/results/ioi/path_patching/structured_sentences.jsonl"
     sentences_data = []
     with open(input_file, 'r', encoding='utf-8') as f:
         for i, line in enumerate(f):

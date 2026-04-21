@@ -33,7 +33,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Output jsonl with positions")
     parser.add_argument(
         "--tokenizer-path",
-        default="/data31/private/wangziran/eap-ig/gpt2",
+        default="/home/wangziran/gpt2",
         help="Local GPT-2 tokenizer path",
     )
     parser.add_argument(

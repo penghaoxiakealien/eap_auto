@@ -12,7 +12,7 @@ from nltk.tokenize import word_tokenize
 # nltk.download('punkt_tab')
 from collections import defaultdict
 import argparse
-sys.path.append("/data31/private/wangziran/auto_eap/")
+sys.path.append("/home/wangziran/eap_auto/")
 # sys.path.append("/data63/private/chensiyuan/EAP-IG/")
 from api import OpenRouter
 from attention_score_by_head import run

@@ -11,7 +11,7 @@ from sklearn.metrics import ndcg_score
 import argparse
 import nltk
 from nltk.tokenize import word_tokenize
-sys.path.append("/data31/private/wangziran/eap_auto")
+sys.path.append("/home/wangziran/eap_auto")
 from tests.experiments.summarize_receiver_heads import summarize_head_group
 
 try:
@@ -21,7 +21,7 @@ except LookupError:
     nltk.download('punkt')
     print("下载完成。")
     
-sys.path.append("/data31/private/wangziran/eap_auto/")
+sys.path.append("/home/wangziran/eap_auto/")
 from api import OpenRouter
 
 async def parse_arguments():
@@ -29,8 +29,8 @@ async def parse_arguments():
     parser = argparse.ArgumentParser(description="Run automated hypothesis generation and refinement for a given attention head.")
     parser.add_argument("--layer", type=int, required=True, help="The sender head's layer.")
     parser.add_argument("--head", type=int, required=True, help="The sender head's number.")
-    parser.add_argument("--rounds", type=int, required=True, help="The round number for saving results.")
-    parser.add_argument("--typename", type=str, required=True, help="The typename of the head (e.g., s_inhibition_head).")
+    parser.add_argument("--rounds", type=int, default=1, help="(Deprecated) Kept for compatibility; no longer controls iterations.")
+    parser.add_argument("--typename", type=str, default="", help="The typename of the head (e.g., s_inhibition_head).")
     parser.add_argument("--output_dir", type=str, required=True, help="Directory to save outputs.")
     parser.add_argument(
         "--causal_dataset",
@@ -61,6 +61,41 @@ async def parse_arguments():
         action="store_true",
         help="Include [REASONING] blocks in LLM outputs (default: only [PREDICTION]).",
     )
+    parser.add_argument(
+        "--optimize-only",
+        choices=["dual", "causal", "attention"],
+        default="dual",
+        help="Refinement focus during iterations (dual=causal+attention, causal=only causal, attention=only attention).",
+    )
+    parser.add_argument(
+        "--validate-every",
+        type=int,
+        default=2,
+        help="Run validation every N epochs.",
+    )
+    parser.add_argument(
+        "--validation-sample-size",
+        type=int,
+        default=0,
+        help="Validation sentences per checkpoint (0 means full validation split).",
+    )
+    parser.add_argument(
+        "--test-sample-size",
+        type=int,
+        default=0,
+        help="Test sentences for final evaluation (0 means full test split).",
+    )
+    parser.add_argument(
+        "--test-all-validations",
+        action="store_true",
+        help="Evaluate every validation checkpoint hypothesis on the test split.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-5.2-2025-12-11",
+        help="OpenRouter model name.",
+    )
     return parser.parse_args()
 
 def format_garden_sid(sid) -> str:
@@ -72,24 +107,31 @@ def format_garden_sid(sid) -> str:
         return f"garden_{int(sid_str):04d}"
     return f"garden_{sid_str}"
 
-def split_dataset(full_dataset, validation_split=0.2, seed=42):
-    """将完整数据集确定性地划分为训练集和验证集"""
-    print(f"将数据集划分为 {1-validation_split:.0%} 训练集和 {validation_split:.0%} 验证集...")
-    random.seed(seed)
+def split_dataset(full_dataset, train_split=0.4, validation_split=0.2, seed=42):
+    """将完整数据集确定性地划分为训练/验证/测试集"""
+    test_split = 1.0 - train_split - validation_split
+    if test_split < 0:
+        raise ValueError("Split ratios must sum to <= 1.0")
+    print(
+        f"将数据集划分为 {train_split:.0%} 训练集、{validation_split:.0%} 验证集、{test_split:.0%} 测试集..."
+    )
     sentence_ids = list(full_dataset.keys())
-    random.shuffle(sentence_ids)
-    
-    split_index = int(len(sentence_ids) * (1 - validation_split))
-    train_ids = sentence_ids[:split_index]
-    validation_ids = sentence_ids[split_index:]
-    
+    train_end = int(len(sentence_ids) * train_split)
+    val_end = int(len(sentence_ids) * (train_split + validation_split))
+    train_ids = sentence_ids[:train_end]
+    validation_ids = sentence_ids[train_end:val_end]
+    test_ids = sentence_ids[val_end:]
+
     train_dataset = {sid: full_dataset[sid] for sid in train_ids}
     validation_dataset = {sid: full_dataset[sid] for sid in validation_ids}
-    
-    print(f"训练集大小: {len(train_dataset)}, 验证集大小: {len(validation_dataset)}")
-    return train_dataset, validation_dataset
+    test_dataset = {sid: full_dataset[sid] for sid in test_ids}
 
-def initialize_openrouter(model: str = "claude-sonnet-4-20250514-thinking"):
+    print(
+        f"训练集大小: {len(train_dataset)}, 验证集大小: {len(validation_dataset)}, 测试集大小: {len(test_dataset)}"
+    )
+    return train_dataset, validation_dataset, test_dataset
+
+def initialize_openrouter(model: str = "gpt-5.2-2025-12-11"):
     """初始化OpenRouter API（默认使用 Claude Sonnet）。"""
     # api_key = "sk-Z3pwy4dD8WY2XZlbzch66NP5hQIoFKeU7KvI2XD8bQSyFVGO"
     # api_key = "sk-99F0IFe53pSHOPQ3phWbEAEx86ZDOqkE58Ov9aYCS9AOQ2C7"
@@ -538,17 +580,28 @@ def evaluate_top_k_predictions(predictions, attention_ground_truth, top_k):
     # --- 【已修改】返回三个值 ---
     return avg_ndcg, avg_f1, final_feedback
 
-def sample_sentences_from_causal_dataset(causal_data, batch_size=5):
-    """从causal_dataset中随机抽样句子及其相关数据"""
+def compute_composite_score(causal_f1, attention_f1, attention_ndcg):
+    """统一综合分数口径：优先用 causal_f1 与 attention_f1 的几何平均。"""
+    if causal_f1 and attention_f1 and causal_f1 > 0 and attention_f1 > 0:
+        return float(np.sqrt(causal_f1 * attention_f1))
+    if causal_f1 and causal_f1 > 0:
+        return float(causal_f1)
+    return 0.0
+
+
+def chunk_dict(data_dict, chunk_size):
+    items = list(data_dict.items())
+    return [dict(items[i:i + chunk_size]) for i in range(0, len(items), chunk_size)]
+
+
+def sample_sentences_from_causal_dataset(causal_data, batch_size=5, start_idx=0):
+    """按固定顺序抽样句子，超出长度后循环。"""
     sentence_ids = list(causal_data.keys())
-    if len(sentence_ids) < batch_size:
-        print(f"警告: 数据集中的句子总数({len(sentence_ids)})少于请求的batch_size({batch_size})。将使用所有句子。")
-        sampled_ids = sentence_ids
-    else:
-        sampled_ids = random.sample(sentence_ids, batch_size)
-    
+    if not sentence_ids:
+        return {}, start_idx
+    sampled_ids = [sentence_ids[(start_idx + i) % len(sentence_ids)] for i in range(batch_size)]
     sampled_sentences = {sid: causal_data[sid] for sid in sampled_ids}
-    return sampled_sentences
+    return sampled_sentences, start_idx + batch_size
 
 async def predict_for_single_sentence(open_router, hypothesis, sid, sentence_data, sender_head, top_k, output_dir, receiver_attention_position, hop_info, with_reasoning):
     """
@@ -776,63 +829,48 @@ def evaluate_predictions(predictions, ground_truth_data, sender_head, top_k=1):
     final_feedback = f"Overall Causal F1 Score for this batch: {avg_f1:.2f}\n\n" + "\n".join(feedback_details)
     return avg_f1, final_feedback, ground_truth_details
 
-async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, explanation, output_dir, f1_score, ndcg_score, attention_f1_score, causal_feedback=None, attention_feedback=None, hop_info=""):
-    """
-    【重大重构】根据用户建议，完全以两个F1分数为核心来驱动假设精炼。
-    """
-    print("根据两个F1分数的组合情况，综合精炼假设...")
+def _extract_tagged_section(text: str, tag: str):
+    if not text:
+        return None
+    tag_re = re.compile(
+        rf"(?im)^\s*(?:\d+\s*[.)]\s*)?(?:[-*]\s*)?(?:\*\*\s*)?\[{re.escape(tag)}\]\s*[:：]?(?:\s*\*\*)?\s*"
+    )
+    fallback_tag_re = re.compile(
+        rf"(?i)(?:\*\*\s*)?\[{re.escape(tag)}\]\s*[:：]?(?:\s*\*\*)?\s*"
+    )
+    tags_re = re.compile(
+        r"(?im)^\s*(?:\d+\s*[.)]\s*)?(?:[-*]\s*)?(?:\*\*\s*)?\[[A-Z_]+\]\s*[:：]?(?:\s*\*\*)?"
+    )
+    match = tag_re.search(text) or fallback_tag_re.search(text)
+    if not match:
+        return None
+    tail = text[match.end() :].strip()
+    next_tag = tags_re.search(tail)
+    if next_tag:
+        tail = tail[: next_tag.start()].strip()
+    return tail or None
 
-    # --- 1. 标准化分数并计算综合分 ---
+
+async def _generate_refine_substep(open_router, system_prompt, user_prompt, output_dir):
+    response = await open_router.generate(
+        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+        output_dir=output_dir,
+    )
+    prompt_log = f"---SYSTEM PROMPT---\n{system_prompt}\n\n---USER PROMPT---\n{user_prompt}"
+    return response.text, prompt_log
+
+
+async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, explanation, output_dir, f1_score, ndcg_score, attention_f1_score, causal_feedback=None, attention_feedback=None, hop_info=""):
+    """按 attention -> causal -> synthesis 三步精炼假设。"""
+    print("按 attention -> causal -> synthesis 三步精炼假设...")
+
     causal_f1 = f1_score if f1_score is not None else 0.0
     attn_f1 = attention_f1_score if attention_f1_score is not None else 0.0
-    
-    # 综合分数完全基于两个F1分数
     composite_score = np.sqrt(causal_f1 * attn_f1) if attention_feedback else causal_f1
+
     print(f"因果F1: {causal_f1:.2f}, 注意力F1: {attn_f1:.2f}, 综合F1分数: {composite_score:.2f}")
 
-    # --- 2. 【核心逻辑】根据双F1分数动态生成任务指令 ---
-    task_guideline = ""
-    # 定义阈值
-    high_threshold = 0.8
-    low_threshold = 0.2
-
-    # 情况一：双高 -> 微调
-    if causal_f1 >= high_threshold and attn_f1 >= high_threshold:
-        task_guideline = (
-            "**Your Task: Minor Refinement (High-Confidence State)**\n"
-            "The current hypothesis is performing exceptionally well on both causal effect and direct attention prediction. **DO NOT make drastic changes.** Your goal is to make **minor, compatible adjustments** that might fix the remaining small errors without breaking what already works.\n"
-            "- **Focus on Clarification:** Can you make the language more precise or concise?\n"
-            "- **Focus on Exception Handling:** Can you add a clause that explains the few failed cases?\n"
-            "**Preserve the core mechanism** of the old hypothesis. Your new hypothesis should be a slightly improved version, not a complete rewrite."
-        )
-    # 情况二：因果F1高，注意力F1低 -> 修复注意力预测
-    elif causal_f1 >= high_threshold and attn_f1 < low_threshold:
-        task_guideline = (
-            "**CRITICAL TASK: Fix Flawed Attention Prediction**\n"
-            f"The previous hypothesis is excellent at predicting the head's causal effect (Causal F1 = {causal_f1:.2f}), but it fails at predicting what the head actually LOOKS AT (Attention F1 = {attn_f1:.2f}).\n"
-            "- **Analyze the 'Direct Attention Prediction' feedback (Source 1) above.** The 'Real Answer' shows what the head truly attends to.\n"
-            "- **You MUST propose a new mechanism** that explains why the head attends to these real tokens, while **preserving the correct understanding of its causal effect**.\n"
-            "- **Reconcile the conflict:** How can attending to *these* tokens lead to the causal effect you predicted correctly?"
-        )
-    # 情况三：注意力F1高，因果F1低 -> 修复因果预测
-    elif attn_f1 >= high_threshold and causal_f1 < low_threshold:
-        task_guideline = (
-            "**TASK: Fix Flawed Causal Effect Prediction**\n"
-            f"The previous hypothesis is excellent at predicting what the head LOOKS AT (Attention F1 = {attn_f1:.2f}), but it **completely fails** at predicting the head's causal effect (Causal F1 = {causal_f1:.2f}).\n"
-            "- **Analyze the 'Causal Effect Prediction' feedback (Source 2) above.** The 'Real Answer' shows the head's true downstream impact.\n"
-            "- **You MUST re-evaluate the head's purpose.** Given that it looks at these specific tokens, what is its true function? Why does it suppress/promote the tokens shown in the feedback?\n"
-            "- **Your new hypothesis must explain this causal mechanism** without changing the correct understanding of what the head attends to."
-        )
-    # 情况四：双低或其他情况 -> 重大重构
-    else:
-        task_guideline = (
-            "**Your Task: Major Refinement (Low-Confidence State)**\n"
-            "The current hypothesis has evident flaws in one or both dimensions. Your goal is to propose a **single, unified hypothesis** that provides a better, more balanced explanation for BOTH phenomena.\n"
-            "**Key Principle: Avoid Over-correction.** Do not become fixated on fixing one type of error to the extent that you abandon a correct understanding of the other. Your new hypothesis must be a robust improvement, not just a shift in focus."
-        )
-
-    # --- 3. 构建完整的Prompt (NDCG仅作为参考信息) ---
-    system_prompt = (
+    common_system_prompt = (
         "**--- Key Concepts in the Garden Task (Crucial Background) ---**\n"
         "To understand the hypothesis, you must know these linguistic roles in the context of a sentence. However, in this task, we may not provide the whole sentence, which means that the disambiguation token at the end of the sentence may be hidden for prediction. For example, \"As the criminal shot the woman who told bad jokes [was/for].\"\n"
         "In this sentence:\n"
@@ -847,9 +885,66 @@ async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, e
         "This means A affects C *through* B (A changes B's behavior, which in turn changes B's effect on C). "
         "Path patching here replaces/patches A's activations into B, then measures how C's attention changes. "
         "Your refined hypothesis must explain how A influences B and how that influence propagates to C, using the downstream-head descriptions when provided."
+        "\n\nReminder: The head may help OR hurt the task; avoid assuming it is beneficial."
     )
 
-    user_prompt_parts = [
+    attention_reasoning = ""
+    attention_prompt_log = ""
+    attention_raw_response = ""
+    if attention_feedback:
+        attention_user_prompt = (
+            f"You are refining a hypothesis for Sender Head {sender_head}.\n"
+            f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
+            "--- PERFORMANCE & FEEDBACK ANALYSIS ---\n"
+            "**Core Metrics:**\n"
+            f"- **Attention F1 Score (What it LOOKS AT): {attn_f1:.2f}**\n"
+            f"(Reference only: Attention NDCG Score: {ndcg_score:.2f})\n\n"
+            "**Feedback Source: Direct Attention Prediction (What the head LOOKS AT)**\n"
+            "This feedback shows how well the hypothesis predicted the head's own Top-K attention targets. A low score means the hypothesis is wrong about what the head is paying attention to.\n"
+            f"{attention_feedback}\n\n"
+            "**Your Task:**\n"
+            "- Analyze the direct-attention errors and trade-offs shown above.\n"
+            "- Identify what the previous hypothesis got right about the head's direct attention targets.\n"
+            "- Identify the main attention-side mistakes or omissions.\n"
+            "- Propose a revised attention-side mechanism that better matches the evidence.\n\n"
+            "**Response Format (Strict):**\n"
+            "1. **[REASONING]:** Start with this tag. Analyze only the direct-attention evidence, explain what the old hypothesis got right, what it got wrong, and what attention-side mechanism is better supported by the feedback. **The colon is mandatory** (must be `[REASONING]:`).\n"
+        )
+        attention_raw_response, attention_prompt_log = await _generate_refine_substep(
+            open_router, common_system_prompt, attention_user_prompt, output_dir
+        )
+        attention_reasoning = _extract_tagged_section(attention_raw_response, "REASONING") or attention_raw_response.strip()
+
+    causal_reasoning = ""
+    causal_prompt_log = ""
+    causal_raw_response = ""
+    if causal_feedback:
+        causal_user_prompt = (
+            f"You are refining a hypothesis for Sender Head {sender_head}.\n"
+            f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
+            "--- PERFORMANCE & FEEDBACK ANALYSIS ---\n"
+            "**Core Metrics:**\n"
+            f"- **Causal F1 Score (What it DOES): {causal_f1:.2f}**\n\n"
+            "**Feedback Source: Causal Effect Prediction (What the head DOES)**\n"
+            "This feedback reveals the head's true downstream function (suppression/promotion). A low score means the hypothesis is wrong about the head's actual effect.\n"
+            f"{causal_feedback}\n\n"
+            "**Your Task:**\n"
+            "- Analyze the causal-effect errors and trade-offs shown above.\n"
+            "- Analyze what the previous hypothesis got right about the head's causal-side effect.\n"
+            "- Identify the main causal-side mistakes or omissions.\n"
+            "- Propose a revised causal-side mechanism that better matches the evidence.\n\n"
+            "Important:\n"
+            "- If the causal feedback consistently supports the current sign of effect, preserve that sign and focus on refining the mechanism rather than reversing the direction.\n"
+            "- Only revise the sign if the feedback repeatedly and clearly contradicts it.\n\n"
+            "**Response Format (Strict):**\n"
+            "1. **[REASONING]:** Start with this tag. Analyze only the causal evidence, explain what the old hypothesis got right, what it got wrong, and what causal-side mechanism is better supported by the feedback. **The colon is mandatory** (must be `[REASONING]:`).\n"
+        )
+        causal_raw_response, causal_prompt_log = await _generate_refine_substep(
+            open_router, common_system_prompt, causal_user_prompt, output_dir
+        )
+        causal_reasoning = _extract_tagged_section(causal_raw_response, "REASONING") or causal_raw_response.strip()
+
+    synthesis_user_prompt = (
         f"You are refining a hypothesis for Sender Head {sender_head}.\n"
         f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
         "--- PERFORMANCE & FEEDBACK ANALYSIS ---\n"
@@ -858,53 +953,58 @@ async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, e
         f"- **Attention F1 Score (What it LOOKS AT): {attn_f1:.2f}**\n"
         f"- **Composite F1 Score (Geometric Mean): {composite_score:.2f}**\n"
         f"(Reference only: Attention NDCG Score: {ndcg_score:.2f})\n\n"
-        "Below is the detailed feedback. Analyze all evidence carefully to formulate a better hypothesis."
-    ]
-    
-    if attention_feedback:
-        user_prompt_parts.append(
-            "\n**Feedback Source 1: Direct Attention Prediction (What the head LOOKS AT)**\n"
-            "This feedback shows how well the hypothesis predicted the head's own Top-K attention targets. A low score means the hypothesis is wrong about what the head is paying attention to.\n"
-            f"{attention_feedback}\n"
-        )
-
-    if causal_feedback:
-        user_prompt_parts.append(
-            "\n**Feedback Source 2: Causal Effect Prediction (What the head DOES)**\n"
-            "This feedback reveals the head's true downstream function (suppression/promotion). A low score means the hypothesis is wrong about the head's actual effect.\n"
-            f"{causal_feedback}\n"
-        )
-    
-    user_prompt_parts.append(f"\n{task_guideline}\n")
-    
-    user_prompt_parts.append(
+        "**Attention-side Reasoning:**\n"
+        f"{attention_reasoning or 'N/A'}\n\n"
+        "**Causal-side Reasoning:**\n"
+        f"{causal_reasoning or 'N/A'}\n\n"
+        "**Your Task:**\n"
+        "- Use the two reasonings above as evidence, not as text to copy.\n"
+        "- Reconcile the attention-side and causal-side evidence into one unified mechanism.\n"
+        "- Produce one improved hypothesis describing this unified mechanism.\n\n"
+        "Important:\n"
+        "- Your final hypothesis must preserve the causal direction supported by the causal-side reasoning.\n"
+        "- You may reframe the mechanism, but do not make the sign of the head's effect ambiguous.\n"
+        f"- Keep the multi-hop setting in view: {hop_info or 'Use the provided receiver/intermediate context.'}\n\n"
         "**Response Format (Strict):**\n"
-        "1.  **[REASONING]:** Start with this tag. First, explicitly analyze the conflict and performance trade-offs: 'The direct attention feedback suggests the head looks at X, while the causal feedback proves its effect is Y. The previous hypothesis performed well on causal effect (F1 score) but poorly on attention (NDCG). It failed because it only accounted for Y.' Then, propose a mechanism that reconciles this conflict in a balanced way. For example: 'A better explanation that preserves the correct causal understanding is that the head attends to X *in order to* gather information to perform action Y.' **The colon is mandatory** (must be `[REASONING]:`). **Not [REASONING:]**.\n"
-        "2.  **[HYPOTHESIS]:** Start with this tag. Provide the final, clean, standalone hypothesis that describes this unified, balanced mechanism. **The colon is mandatory** (must be `[HYPOTHESIS]:`). **Not [HYPOTHESIS:]**.\n"
+        "1. **[REASONING]:** Start with this tag. Explicitly analyze how you reconciled the attention-side and causal-side evidence into one coherent mechanism.\n"
+        "2. **[HYPOTHESIS]:** Start with this tag. Provide one clean standalone hypothesis describing this unified mechanism.\n"
         "    - This paragraph must clearly and abstractly describe what this head is doing (functionally).\n"
         "    - Do not include tokens, examples, scores, or error context in the `[HYPOTHESIS]` paragraph.\n"
         "    - The hypothesis should sound like a standalone description of the head's role in the model with no concessions or negations.\n"
         "    - The hypothesis should describe the dominant functional behavior using precise linguistic, semantic, or structural terminology. Avoid overly abstract or generic phrasing like 'tracks entities' or 'maintains context'."
     )
-    
-    user_prompt = "\n".join(user_prompt_parts)
-    
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
-    ]
-    response = await open_router.generate(messages=messages, output_dir=output_dir)
-    
-    response_text = response.text
-    reasoning = "No reasoning found in response."
-    match = re.search(r"\[REASONING\]\s*:?(.*?)(?:\n\s*\[HYPOTHESIS\]|\Z)", response_text, re.DOTALL | re.IGNORECASE)
-    if match:
-        reasoning = match.group(1).strip() or reasoning
-    new_hypothesis = extract_hypothesis_text(response_text)
-    
-    prompt_log = f"---SYSTEM PROMPT---\n{system_prompt}\n\n---USER PROMPT---\n{user_prompt}"
-    raw_response_log = response.text
-    
+    synthesis_raw_response, synthesis_prompt_log = await _generate_refine_substep(
+        open_router, common_system_prompt, synthesis_user_prompt, output_dir
+    )
+
+    synthesis_reasoning = _extract_tagged_section(synthesis_raw_response, "REASONING") or "No reasoning found in response."
+    new_hypothesis = _extract_tagged_section(synthesis_raw_response, "HYPOTHESIS") or extract_hypothesis_text(synthesis_raw_response) or old_hypothesis
+
+    reasoning = (
+        "=== ATTENTION REASONING ===\n"
+        f"{attention_reasoning or 'N/A'}\n\n"
+        "=== CAUSAL REASONING ===\n"
+        f"{causal_reasoning or 'N/A'}\n\n"
+        "=== SYNTHESIS REASONING ===\n"
+        f"{synthesis_reasoning}"
+    )
+    prompt_log = (
+        "=== ATTENTION STEP ===\n"
+        f"{attention_prompt_log}\n\n"
+        "=== CAUSAL STEP ===\n"
+        f"{causal_prompt_log}\n\n"
+        "=== SYNTHESIS STEP ===\n"
+        f"---SYSTEM PROMPT---\n{common_system_prompt}\n\n---USER PROMPT---\n{synthesis_user_prompt}"
+    )
+    raw_response_log = (
+        "=== ATTENTION STEP ===\n"
+        f"{attention_raw_response}\n\n"
+        "=== CAUSAL STEP ===\n"
+        f"{causal_raw_response}\n\n"
+        "=== SYNTHESIS STEP ===\n"
+        f"{synthesis_raw_response}"
+    )
+
     print("精炼后的假设:", new_hypothesis)
     return new_hypothesis, reasoning, prompt_log, raw_response_log
 
@@ -1012,9 +1112,13 @@ async def evaluate_single_hypothesis(hypothesis, open_router, validation_dataset
     }
     
 async def main():
-    # 1. 初始化和加载数据
     args = await parse_arguments()
     with_reasoning = args.with_reasoning
+    optimize_only = args.optimize_only
+    validate_every = max(1, int(args.validate_every))
+    validation_sample_size = max(0, int(args.validation_sample_size))
+    test_sample_size = max(0, int(args.test_sample_size))
+    test_all_validations = bool(args.test_all_validations)
     sender_head = (args.layer, args.head)
     output_dir = args.output_dir
     receiver_heads = [h.strip() for h in args.receiver_heads.split(",") if h.strip()] if args.receiver_heads else []
@@ -1025,8 +1129,12 @@ async def main():
                 receiver_descriptions = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"警告: 无法加载 receiver 描述文件 {args.receiver_descriptions_file}: {e}")
-    # 为两个阶段分别设置迭代次数
-    MAX_ITERATIONS = 5 
+
+    epochs = 8
+    train_batch_size = 10
+    init_batch_size = 5
+    top_k_attention = 2
+    top_k_causal = 1
 
     meta = load_receiver_group_meta(output_dir)
     sender_attention_position = (meta.get("attention_position") or "end").upper()
@@ -1034,17 +1142,9 @@ async def main():
     run_type = (meta.get("run_type") or "middle").strip().lower()
     intermediate_heads = [h for h in (meta.get("intermediate_heads") or []) if h]
     target_head = (meta.get("target_head") or "").strip()
-    
-    top_k_attention = 2
-    top_k_causal = 1
 
-    # --- 加载双份Ground Truth数据 ---
     data_source_dir = (args.data_source_dir or "").strip()
-    # 数据源1：因果效应数据
-    if data_source_dir:
-        full_causal_dataset_path = os.path.join(data_source_dir, "causal_dataset.json")
-    else:
-        full_causal_dataset_path = args.causal_dataset
+    full_causal_dataset_path = os.path.join(data_source_dir, "causal_dataset.json") if data_source_dir else args.causal_dataset
     try:
         with open(full_causal_dataset_path, "r") as f:
             full_causal_dataset = json.load(f)
@@ -1052,19 +1152,15 @@ async def main():
         print(f"错误: 无法加载因果数据集 {full_causal_dataset_path}: {e}")
         return
 
-    # 数据源2：直接注意力分数数据
-    if data_source_dir:
-        attention_scores_dataset_path = os.path.join(data_source_dir, "attention_scores_ground_truth.jsonl")
-    else:
-        attention_scores_dataset_path = os.path.join(output_dir, "attention_scores_ground_truth.jsonl")
+    attention_scores_dataset_path = (
+        os.path.join(data_source_dir, "attention_scores_ground_truth.jsonl")
+        if data_source_dir
+        else os.path.join(output_dir, "attention_scores_ground_truth.jsonl")
+    )
     attention_ground_truth = {}
     try:
-        # 【已修正】修改加载方式，从逐行加载JSONL改为一次性加载标准JSON
         with open(attention_scores_dataset_path, "r") as f:
-            # 直接加载整个文件，因为它是一个JSON列表
-            all_data = json.load(f) 
-            
-            # 遍历加载后的列表来构建字典
+            all_data = json.load(f)
             for data in all_data:
                 if "key" in data and "attention_scores" in data:
                     raw_tokens = [item.get("token", "") for item in data["attention_scores"]]
@@ -1073,82 +1169,49 @@ async def main():
                         "sentence_text": data.get("original_sentence", ""),
                         "tokens": raw_tokens,
                         "tokens_suffixed": suffixed_tokens,
-                        "scores": [item.get("score", 0.0) for item in data["attention_scores"]]
+                        "scores": [item.get("score", 0.0) for item in data["attention_scores"]],
                     }
-                else:
-                    print(f"警告: 在 {attention_scores_dataset_path} 中发现缺少 'key' 或 'attention_scores' 的条目，已跳过。")
-
         if not attention_ground_truth:
-             print(f"警告: 从 {attention_scores_dataset_path} 加载了 0 条有效的注意力数据。")
-             attention_ground_truth = None
-        else:
-             print(f"成功加载 {len(attention_ground_truth)} 条直接注意力基准数据。")
-
-    except FileNotFoundError:
-        print(f"警告: 未找到直接注意力基准数据文件 {attention_scores_dataset_path}。\n第一阶段的精炼将被跳过。")
-        attention_ground_truth = None
-    except json.JSONDecodeError as e:
-        print(f"错误: 解析JSON文件 {attention_scores_dataset_path} 时失败: {e}\n第一阶段的精炼将被跳过。")
-        attention_ground_truth = None
+            attention_ground_truth = None
     except Exception as e:
-        print(f"加载 {attention_scores_dataset_path} 时发生未知错误: {e}\n第一阶段的精炼将被跳过。")
+        print(f"警告: 无法加载直接注意力基准数据 {attention_scores_dataset_path}: {e}")
         attention_ground_truth = None
 
     if attention_ground_truth:
         summary_file_path = os.path.join(output_dir, "attention_top2_summary.txt")
-        print(f"\n正在生成注意力规律总览文件，将保存至: {summary_file_path}")
         try:
             with open(summary_file_path, "w", encoding="utf-8") as f:
-                # 为了保证输出顺序与原始文件一致，我们按句子ID排序
-                sorted_sids = sorted(attention_ground_truth.keys())
-                
-                for sid in sorted_sids:
+                for sid in sorted(attention_ground_truth.keys()):
                     data = attention_ground_truth[sid]
-                    sentence_text = data.get("sentence_text", "N/A")
                     tokens = data.get("tokens_suffixed") or data.get("tokens", [])
                     scores = data.get("scores", [])
-
                     if not tokens or not scores:
                         continue
-
-                    # 将token和分数打包并按分数从高到低排序
-                    all_tokens_with_scores = sorted(zip(tokens, scores), key=lambda x: x[1], reverse=True)
-                    
-                    # 提取Top-2的token
-                    top_1_token = all_tokens_with_scores[0][0] if len(all_tokens_with_scores) > 0 else "N/A"
-                    top_2_token = all_tokens_with_scores[1][0] if len(all_tokens_with_scores) > 1 else "N/A"
-
-                    # 写入格式化的字符串
+                    ranked = sorted(zip(tokens, scores), key=lambda x: x[1], reverse=True)
                     f.write(f"Sentence ID: {format_garden_sid(sid)}\n")
-                    f.write(f"Sentence: {sentence_text}\n")
-                    f.write(f"Top-1 Token: {top_1_token}\n")
-                    f.write(f"Top-2 Token: {top_2_token}\n")
+                    f.write(f"Sentence: {data.get('sentence_text', 'N/A')}\n")
+                    f.write(f"Top-1 Token: {ranked[0][0] if len(ranked) > 0 else 'N/A'}\n")
+                    f.write(f"Top-2 Token: {ranked[1][0] if len(ranked) > 1 else 'N/A'}\n")
                     f.write("-" * 50 + "\n")
-            
-            print("注意力规律总览文件生成成功。")
         except Exception as e:
             print(f"错误：生成注意力规律总览文件时失败: {e}")
-            
-    train_dataset, validation_dataset = split_dataset(full_causal_dataset)
-    open_router = initialize_openrouter()
-    full_run_log = []
-    
+
+    train_dataset, validation_dataset, test_dataset = split_dataset(full_causal_dataset)
+    open_router = initialize_openrouter(model=args.model)
+
     receiver_heads_text = ", ".join(receiver_heads) if receiver_heads else "unknown"
     if run_type == "middle_plus" and intermediate_heads and target_head:
         hop_info = (
             f"TWO-HOP (A→B→C). A=Sender Head {sender_head}. "
             f"B=Intermediate Head(s) {', '.join(intermediate_heads)}. "
-            f"C=Target Head {target_head}. "
-            "Causal effects are measured at C."
+            f"C=Target Head {target_head}. Causal effects are measured at C."
         )
     else:
         hop_info = (
             f"SINGLE-HOP (A→B). A=Sender Head {sender_head}. "
-            f"B=Receiver Head(s) {receiver_heads_text}. "
-            "Causal effects are measured at B."
+            f"B=Receiver Head(s) {receiver_heads_text}. Causal effects are measured at B."
         )
 
-    print("生成初始假设...")
     downstream_text = ", ".join(receiver_heads) if receiver_heads else "the downstream heads of interest"
     receiver_desc_lines = []
     if receiver_descriptions:
@@ -1159,12 +1222,7 @@ async def main():
             heads_with_desc = [h for h in ordered_heads if receiver_descriptions.get(h)]
             if len(heads_with_desc) > 1:
                 group_summary = await summarize_head_group(
-                    open_router,
-                    receiver_descriptions,
-                    ordered_heads,
-                    "target_heads",
-                    output_dir,
-                    task="garden",
+                    open_router, receiver_descriptions, ordered_heads, "target_heads", output_dir, task="garden"
                 )
         if group_summary:
             receiver_desc_lines.append(f"- **Heads {', '.join(ordered_heads)} (summary):** {group_summary}")
@@ -1174,244 +1232,298 @@ async def main():
                 if desc:
                     receiver_desc_lines.append(f"- **Head {head}**: {desc}")
     else:
-        receiver_desc_lines.append("- The downstream heads are typically Name Mover / Negative Name Mover variants that attend from the END token to candidate names and directly shape the logits.")
+        receiver_desc_lines.append("- The downstream heads attend to disambiguation cues; the sender head changes their attention and thereby changes the garden task outcome.")
     receiver_desc_block = "\n".join(receiver_desc_lines)
 
-    explanation = f"""
-        Background Context:
-        - Sender head {sender_head} is believed to function by influencing downstream heads ({downstream_text}).
-        - These downstream heads attend to disambiguation cues; any disruption introduced by {sender_head} will change their attention patterns and therefore the garden task outcome.
-        {receiver_desc_block}
-
-        Your task is to hypothesize the function of the sender head {sender_head} mainly based on how it causally affects the attention of these downstream heads.
-        """
-    
-    # 【重大改变】采用新的、基于样本的假设生成流程
-    # 1. 随机抽样5个句子
-    sampled_sentences = sample_sentences_from_causal_dataset(train_dataset, batch_size=5)
-    
-    # 2. 为这5个句子计算真实的因果效应
-    causal_examples = get_causal_effects_for_sampling(sampled_sentences, sender_head, top_k=1)
-    
-    if not causal_examples:
-        print("无法为抽样句子计算因果效应，程序终止。")
-        return
-
-    # 3. 让LLM根据这些具体例子进行归纳
-    current_hypothesis, initial_hypothesis_prompt = await generate_initial_hypothesis(
-        open_router, sender_head, causal_examples, explanation, output_dir, hop_info
+    explanation = (
+        f"Background Context:\n"
+        f"- Sender head {sender_head} is believed to function by influencing downstream heads ({downstream_text}).\n"
+        f"- These downstream heads attend to disambiguation cues; any disruption introduced by {sender_head} will change their attention patterns and therefore the garden task outcome.\n"
+        f"{receiver_desc_block}\n\n"
+        f"Your task is to hypothesize the function of the sender head {sender_head} mainly based on how it causally affects the attention of these downstream heads."
     )
-    
-    if not current_hypothesis:
-        print("无法生成初始假设，程序终止。")
+
+    iteration_results_dir = os.path.join(output_dir, "iteration_results")
+    validation_results_dir = os.path.join(output_dir, "validation_results")
+    os.makedirs(iteration_results_dir, exist_ok=True)
+    os.makedirs(validation_results_dir, exist_ok=True)
+    full_run_log = []
+    validation_history = []
+
+    def persist_validation_artifacts():
+        validation_path = os.path.join(output_dir, "validation_results.json")
+        try:
+            with open(validation_path, "w", encoding="utf-8") as f:
+                json.dump(validation_history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"警告: 无法写入 validation_results.json: {e}")
+        for item in validation_history:
+            label = str(item.get("label", "validation")).strip() or "validation"
+            safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label)
+            item_path = os.path.join(validation_results_dir, f"{safe_label}.json")
+            try:
+                with open(item_path, "w", encoding="utf-8") as f:
+                    json.dump(item, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"警告: 无法写入 {item_path}: {e}")
+        if validation_history:
+            best = max(validation_history, key=lambda r: r.get("validation_scores", {}).get("composite_score", 0.0))
+            with open(os.path.join(output_dir, "best_hypothesis.json"), "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "head": f"{sender_head[0]}.{sender_head[1]}",
+                        "iteration": best.get("label"),
+                        "best_hypothesis": best.get("hypothesis"),
+                        "validation_scores": best.get("validation_scores"),
+                        "source": "validation_history",
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+    async def evaluate_hypothesis_on_ids(hypothesis, sentence_ids, label):
+        if not sentence_ids:
+            return None
+        subset = {sid: validation_dataset.get(sid, test_dataset.get(sid, train_dataset.get(sid))) for sid in sentence_ids}
+        subset = {sid: data for sid, data in subset.items() if data is not None}
+        if not subset:
+            return None
+        result = await evaluate_single_hypothesis(
+            hypothesis,
+            open_router,
+            subset,
+            sender_head,
+            top_k_causal,
+            top_k_attention,
+            attention_ground_truth,
+            output_dir,
+            sender_attention_position,
+            receiver_attention_position,
+            hop_info,
+            with_reasoning,
+        )
+        if result:
+            scores = result.get("validation_scores", {})
+            composite = compute_composite_score(
+                scores.get("causal_f1", 0.0),
+                scores.get("direct_attention_f1", 0.0),
+                scores.get("direct_attention_ndcg", 0.0),
+            )
+            result["label"] = label
+            result["sentence_ids"] = sentence_ids
+            result["validation_scores"]["composite_score"] = composite
+            result["validation_scores"]["composite_f1"] = composite
+        return result
+
+    train_cursor = 0
+    initial_hypothesis_candidates = []
+    for candidate_idx in range(1, 4):
+        sampled_sentences, train_cursor = sample_sentences_from_causal_dataset(train_dataset, batch_size=init_batch_size, start_idx=train_cursor)
+        causal_examples = get_causal_effects_for_sampling(sampled_sentences, sender_head, top_k=1)
+        if not causal_examples:
+            print(f"无法为初始候选 {candidate_idx} 计算因果效应，程序终止。")
+            return
+        hypothesis, prompt = await generate_initial_hypothesis(open_router, sender_head, causal_examples, explanation, output_dir, hop_info)
+        if not hypothesis:
+            print(f"无法生成初始候选 {candidate_idx} 假设，程序终止。")
+            return
+        initial_hypothesis_candidates.append(
+            {
+                "candidate_index": candidate_idx,
+                "hypothesis": hypothesis,
+                "sampled_sentence_ids": list(sampled_sentences.keys()),
+                "prompt": prompt,
+            }
+        )
+
+    with open(os.path.join(output_dir, "initial_hypothesis_candidates.json"), "w", encoding="utf-8") as f:
+        json.dump(initial_hypothesis_candidates, f, ensure_ascii=False, indent=2)
+
+    val_ids_all = list(validation_dataset.keys())
+    val_ids = val_ids_all[:validation_sample_size] if validation_sample_size > 0 and len(val_ids_all) > validation_sample_size else val_ids_all
+    init_candidate_results = []
+    for candidate in initial_hypothesis_candidates:
+        candidate_result = await evaluate_hypothesis_on_ids(candidate["hypothesis"], val_ids, f"validation_epoch_0_candidate_{candidate['candidate_index']}")
+        if candidate_result:
+            candidate_result["candidate_index"] = candidate["candidate_index"]
+            candidate_result["sampled_sentence_ids"] = candidate.get("sampled_sentence_ids", [])
+            candidate_result["initial_hypothesis_prompt"] = candidate.get("prompt", "")
+            candidate_result["decision"] = "candidate_evaluated"
+            init_candidate_results.append(candidate_result)
+            validation_history.append(candidate_result)
+
+    if not init_candidate_results:
+        print("错误: 无法评估任何初始候选假设，程序终止。")
         return
 
-    all_hypotheses = {current_hypothesis}
-    iteration_results_dir = os.path.join(output_dir, "iteration_results")
-    os.makedirs(iteration_results_dir, exist_ok=True)
+    best_init_candidate = max(init_candidate_results, key=lambda r: r.get("validation_scores", {}).get("composite_score", 0.0))
+    init_val_result = copy.deepcopy(best_init_candidate)
+    init_val_result["label"] = "validation_epoch_0_initial"
+    init_val_result["decision"] = "selected_as_initial_start"
+    validation_history.append(init_val_result)
+    persist_validation_artifacts()
 
-    def _write_iteration_result(iteration_idx, record):
-        path = os.path.join(iteration_results_dir, f"iteration_{iteration_idx}.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(record, f, ensure_ascii=False, indent=2)
+    current_hypothesis = init_val_result.get("hypothesis", "")
+    initial_hypothesis = current_hypothesis
+    initial_hypothesis_prompt = init_val_result.get("initial_hypothesis_prompt", "")
+    previous_val_result = init_val_result
 
-    # --- 统一的并行迭代精炼循环 ---
-    print("\n--- 开始统一的并行迭代精炼循环 ---")
-    for i in range(1, MAX_ITERATIONS + 1):
-        print(f"\n--- Iteration {i}/{MAX_ITERATIONS} ---")
-        iteration_log = {"iteration": i, "hypothesis_before": current_hypothesis}
+    for epoch in range(1, epochs + 1):
+        iteration_log = {"epoch": epoch, "hypothesis_before": current_hypothesis}
+        test_sentences_batch, train_cursor = sample_sentences_from_causal_dataset(train_dataset, batch_size=train_batch_size, start_idx=train_cursor)
 
-        # --- 1. 并行预测 ---
-        test_sentences_batch = sample_sentences_from_causal_dataset(train_dataset, batch_size=5)
-        causal_predictions, _, _ = await predict_attention_changes_for_sentences(
-            open_router, current_hypothesis, test_sentences_batch, sender_head, top_k_causal, output_dir, receiver_attention_position, hop_info, with_reasoning
-        )
-        
+        causal_predictions = {}
+        causal_feedback = None
+        causal_ground_truth = {}
+        causal_f1 = 0.0
+        if optimize_only != "attention":
+            causal_predictions, _, _ = await predict_attention_changes_for_sentences(
+                open_router, current_hypothesis, test_sentences_batch, sender_head, top_k_causal, output_dir, receiver_attention_position, hop_info, with_reasoning
+            )
+            causal_f1, causal_feedback, causal_ground_truth = evaluate_predictions(causal_predictions, test_sentences_batch, sender_head, top_k=top_k_causal)
+
         attention_predictions = None
-        if attention_ground_truth:
-            test_sentences_attention = {sid: data for sid, data in attention_ground_truth.items() if sid in test_sentences_batch}
-            tasks = [
-                predict_top_k_attenders_for_sentence(
-                    open_router, current_hypothesis, sid, data, sender_head, top_k_attention, output_dir, sender_attention_position, with_reasoning
-                )
-                for sid, data in test_sentences_attention.items()
-            ]
-            results = await asyncio.gather(*tasks)
-            attention_predictions = {sid: result for sid, result in results}
-
-        # --- 2. 并行评估 ---
-        f1_score, causal_feedback, causal_ground_truth = evaluate_predictions(
-            causal_predictions, train_dataset, sender_head, top_k=top_k_causal
-        )
-        print(f"Iteration {i} Causal F1 Score: {f1_score:.2f}")
-        iteration_log["causal_f1"] = f1_score
-        iteration_log["causal_feedback"] = causal_feedback
-
         ndcg_score_val = 0.0
-        f1_score_att = 0.0
+        attention_f1 = 0.0
         attention_feedback = None
         attention_ground_truth_batch = None
-        if attention_ground_truth and attention_predictions:
-            ndcg_score_val, f1_score_att, attention_feedback = evaluate_top_k_predictions(attention_predictions, attention_ground_truth, top_k_attention)
-            print(f"Iteration {i} Direct Attention NDCG@{top_k_attention}: {ndcg_score_val:.2f}")
-            print(f"Iteration {i} Direct Attention F1: {f1_score_att:.2f}")
-            iteration_log.update({"attention_ndcg": ndcg_score_val, "attention_f1": f1_score_att, "attention_feedback": attention_feedback})
-            attention_ground_truth_batch = {
-                sid: attention_ground_truth[sid]
-                for sid in attention_predictions.keys()
-                if sid in attention_ground_truth
+        if attention_ground_truth and optimize_only != "causal":
+            test_sentences_attention = {sid: data for sid, data in attention_ground_truth.items() if sid in test_sentences_batch}
+            attention_predictions = {}
+            for batch in chunk_dict(test_sentences_attention, 5):
+                tasks = [
+                    predict_top_k_attenders_for_sentence(
+                        open_router, current_hypothesis, sid, data, sender_head, top_k_attention, output_dir, sender_attention_position, with_reasoning
+                    )
+                    for sid, data in batch.items()
+                ]
+                results = await asyncio.gather(*tasks)
+                attention_predictions.update({sid: result for sid, result in results})
+            ndcg_score_val, attention_f1, attention_feedback = evaluate_top_k_predictions(attention_predictions, attention_ground_truth, top_k_attention)
+            attention_ground_truth_batch = {sid: attention_ground_truth[sid] for sid in attention_predictions if sid in attention_ground_truth}
+
+        iteration_log.update(
+            {
+                "causal_f1": causal_f1,
+                "attention_ndcg": ndcg_score_val,
+                "attention_f1": attention_f1,
+                "causal_feedback": causal_feedback,
+                "attention_feedback": attention_feedback,
             }
+        )
 
-        # --- 3. 检查终止条件 ---
-        if f1_score > 0.85 and ndcg_score_val > 0.85 and f1_score_att > 0.85:
-            print("假设收敛成功。")
-            full_run_log.append(iteration_log)
-            try:
-                record = {
-                    "iteration": i,
-                    "hypothesis": current_hypothesis,
-                    "scores": {
-                        "causal_f1": f1_score,
-                        "attention_f1": f1_score_att,
-                        "attention_ndcg": ndcg_score_val,
-                    },
-                    "predicted_causal": causal_predictions,
-                    "causal_ground_truth": causal_ground_truth,
-                    "predicted_attention": attention_predictions,
-                    "attention_ground_truth": attention_ground_truth_batch,
-                }
-                _write_iteration_result(i, record)
-            except Exception as e:
-                print(f"警告: 无法写入 iteration_results/iteration_{i}.json: {e}")
-            break
-        
-        if i == MAX_ITERATIONS:
-            full_run_log.append(iteration_log)
-            try:
-                record = {
-                    "iteration": i,
-                    "hypothesis": current_hypothesis,
-                    "scores": {
-                        "causal_f1": f1_score,
-                        "attention_f1": f1_score_att,
-                        "attention_ndcg": ndcg_score_val,
-                    },
-                    "predicted_causal": causal_predictions,
-                    "causal_ground_truth": causal_ground_truth,
-                    "predicted_attention": attention_predictions,
-                    "attention_ground_truth": attention_ground_truth_batch,
-                }
-                _write_iteration_result(i, record)
-            except Exception as e:
-                print(f"警告: 无法写入 iteration_results/iteration_{i}.json: {e}")
-            break
-
-        # --- 4. 统一精炼 ---
         current_hypothesis, reasoning, prompt, raw_response = await refine_hypothesis_combined(
-            open_router, current_hypothesis, sender_head, explanation, output_dir, 
-            f1_score=f1_score,
+            open_router,
+            current_hypothesis,
+            sender_head,
+            explanation,
+            output_dir,
+            f1_score=causal_f1,
             ndcg_score=ndcg_score_val,
-            attention_f1_score=f1_score_att,
-            causal_feedback=causal_feedback, 
-            attention_feedback=attention_feedback,
+            attention_f1_score=attention_f1,
+            causal_feedback=causal_feedback if optimize_only != "attention" else None,
+            attention_feedback=attention_feedback if optimize_only != "causal" else None,
             hop_info=hop_info,
         )
-        all_hypotheses.add(current_hypothesis) # 收集新假设
-        iteration_log.update({
-            "hypothesis_after": current_hypothesis, 
-            "refinement_reasoning": reasoning, 
-            "refinement_prompt": prompt, 
-            "refinement_raw_response": raw_response
-        })
-        full_run_log.append(iteration_log)
-        try:
-            record = {
-                "iteration": i,
-                "hypothesis": current_hypothesis,
-                "scores": {
-                    "causal_f1": f1_score,
-                    "attention_f1": f1_score_att,
-                    "attention_ndcg": ndcg_score_val,
-                },
-                "predicted_causal": causal_predictions,
-                "causal_ground_truth": causal_ground_truth,
-                "predicted_attention": attention_predictions,
-                "attention_ground_truth": attention_ground_truth_batch,
+        iteration_log.update(
+            {
+                "hypothesis_after": current_hypothesis,
+                "refinement_reasoning": reasoning,
+                "refinement_prompt": prompt,
+                "refinement_raw_response": raw_response,
             }
-            _write_iteration_result(i, record)
-        except Exception as e:
-            print(f"警告: 无法写入 iteration_results/iteration_{i}.json: {e}")
+        )
+        full_run_log.append(iteration_log)
 
-    print(f"\n--- 迭代完成，共产生 {len(all_hypotheses)} 个独立假设 ---")
-    print("--- 开始在验证集上并行评估所有候选假设 (这可能需要一些时间)... ---")
-
-    # 创建一个任务列表，每个任务都是对一个假设的完整评估
-    semaphore = asyncio.Semaphore(2)
-
-    async def _run_validation(hypothesis):
-        async with semaphore:
-            return await evaluate_single_hypothesis(
-                hypothesis,
-                open_router,
-                validation_dataset,
-                sender_head,
-                top_k_causal,
-                top_k_attention,
-                attention_ground_truth,
-                output_dir,
-                sender_attention_position,
-                receiver_attention_position,
-                hop_info,
-                with_reasoning,
+        with open(os.path.join(output_dir, "iteration_results", f"iteration_{epoch}.json"), "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "epoch": epoch,
+                    "hypothesis": current_hypothesis,
+                    "scores": {
+                        "causal_f1": causal_f1,
+                        "attention_f1": attention_f1,
+                        "attention_ndcg": ndcg_score_val,
+                    },
+                    "predicted_causal": causal_predictions,
+                    "causal_ground_truth": causal_ground_truth,
+                    "predicted_attention": attention_predictions,
+                    "attention_ground_truth": attention_ground_truth_batch,
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
             )
 
-    validation_results = await asyncio.gather(*[
-        _run_validation(hypothesis) for hypothesis in list(all_hypotheses)
-    ])
+        if epoch % validate_every == 0:
+            val_result = await evaluate_hypothesis_on_ids(current_hypothesis, val_ids, f"validation_epoch_{epoch}")
+            if val_result:
+                composite = float(val_result.get("validation_scores", {}).get("composite_score", 0.0))
+                prev_score = float(previous_val_result.get("validation_scores", {}).get("composite_score", 0.0)) if previous_val_result else None
+                if previous_val_result is not None and composite < prev_score:
+                    rollback_hypothesis = previous_val_result.get("hypothesis", "")
+                    if rollback_hypothesis:
+                        current_hypothesis = rollback_hypothesis
+                    val_result["decision"] = "rollback_to_previous_validation"
+                    val_result["previous_validation_composite_score"] = prev_score
+                    val_result["previous_validation_composite_f1"] = prev_score
+                else:
+                    val_result["decision"] = "accept_current"
+                    previous_val_result = val_result
+                validation_history.append(val_result)
+                persist_validation_artifacts()
 
-    # --- 日志记录 ---
+    hypothesis_for_test = current_hypothesis
+    test_ids_all = list(test_dataset.keys())
+    test_ids = test_ids_all[:test_sample_size] if test_sample_size > 0 and len(test_ids_all) > test_sample_size else test_ids_all
+    test_result = await evaluate_hypothesis_on_ids(hypothesis_for_test, test_ids, "test_final")
+    if test_result:
+        with open(os.path.join(output_dir, "test_results.json"), "w", encoding="utf-8") as f:
+            json.dump(test_result, f, ensure_ascii=False, indent=2)
+
+    same_as_final = (initial_hypothesis or "").strip() == (hypothesis_for_test or "").strip()
+    if same_as_final:
+        initial_test_result = dict(test_result) if isinstance(test_result, dict) else None
+        if initial_test_result:
+            initial_test_result["label"] = "test_initial"
+            initial_test_result["shared_with_final"] = True
+    else:
+        initial_test_result = await evaluate_hypothesis_on_ids(initial_hypothesis, test_ids, "test_initial")
+    if initial_test_result:
+        with open(os.path.join(output_dir, "initial_test_results.json"), "w", encoding="utf-8") as f:
+            json.dump(initial_test_result, f, ensure_ascii=False, indent=2)
+
+    if test_all_validations and validation_history:
+        all_val_test_results = []
+        for item in validation_history:
+            hyp = item.get("hypothesis", "")
+            label = str(item.get("label", "validation"))
+            if not hyp:
+                continue
+            res = await evaluate_hypothesis_on_ids(hyp, test_ids, f"test_from_{label}")
+            if res:
+                all_val_test_results.append(res)
+        with open(os.path.join(output_dir, "test_results_all_validations.json"), "w", encoding="utf-8") as f:
+            json.dump(all_val_test_results, f, ensure_ascii=False, indent=2)
+
     final_log_entry = {
         "head": f"{sender_head[0]}.{sender_head[1]}",
         "typename": args.typename,
+        "initial_hypothesis_candidates": initial_hypothesis_candidates,
         "initial_hypothesis_prompt": initial_hypothesis_prompt,
         "full_run_log": full_run_log,
-        "all_hypotheses_validation_results": validation_results
+        "all_hypotheses_validation_results": validation_history,
+        "selected_validation_last": validation_history[-1] if validation_history else None,
+        "hypothesis_used_for_test": hypothesis_for_test,
+        "initial_hypothesis": initial_hypothesis,
+        "initial_test_results": initial_test_result,
+        "test_results": test_result,
     }
-    
-    final_log_path = os.path.join(output_dir, f"final_result_round_{args.rounds}.json")
-    with open(final_log_path, "w") as f:
-        json.dump(final_log_entry, f, indent=2, ensure_ascii=False)
-    
+    final_log_path = os.path.join(output_dir, "final_result_all_rounds.json")
+    with open(final_log_path, "w", encoding="utf-8") as f:
+        json.dump(final_log_entry, f, ensure_ascii=False, indent=2)
     print(f"\n所有运行数据和最终的并行验证结果已统一保存至: {final_log_path}")
-
-    # Save best hypothesis summary (geometric mean of causal_f1 and attention_f1)
-    try:
-        best = None
-        best_score = -1.0
-        for entry in validation_results:
-            scores = entry.get("validation_scores", {}) if isinstance(entry, dict) else {}
-            attn = float(scores.get("direct_attention_f1") or scores.get("attention_f1") or 0.0)
-            causal = float(scores.get("causal_f1") or 0.0)
-            composite = (attn * causal) ** 0.5 if attn > 0 and causal > 0 else 0.0
-            if composite > best_score:
-                best_score = composite
-                best = entry
-        if best is None:
-            raise ValueError("no validation results to summarize")
-        summary = {
-            "head": f"{sender_head[0]}.{sender_head[1]}",
-            "typename": args.typename,
-            "best_hypothesis": best.get("hypothesis") if isinstance(best, dict) else None,
-            "validation_scores": best.get("validation_scores", {}) if isinstance(best, dict) else {},
-            "composite_score": best_score,
-            "source_file": final_log_path,
-        }
-        best_path = os.path.join(output_dir, "best_hypothesis.json")
-        with open(best_path, "w", encoding="utf-8") as f:
-            json.dump(summary, f, ensure_ascii=False, indent=2)
-        print(f"✅ Saved best hypothesis to {best_path}")
-    except Exception as e:
-        print(f"警告: 生成 best_hypothesis 失败: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

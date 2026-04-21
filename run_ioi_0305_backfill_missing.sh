@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0305}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0305}"
 STANDARD_FILE="${STANDARD_FILE:-${RESULTS_ROOT}/path_patching/standard_ioi_data.json}"
 MAX_JOBS="${MAX_JOBS:-3}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"

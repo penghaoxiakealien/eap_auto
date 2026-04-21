@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0307}"
-REF_ROOT="${REF_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0126/answer}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0307}"
+REF_ROOT="${REF_ROOT:-/home/wangziran/eap_auto/results/ioi_0126/answer}"
 PYTHON_BIN="${PYTHON_BIN:-/home/wangziran/miniconda3/envs/eap-ig/bin/python}"
 MODEL="${MODEL:-claude-sonnet-4-20250514-thinking}"
 API_KEY="${API_KEY:-sk-cdENMjpwVIpdd1Iv0auFiHizYdgnWM0ZFKhHN3UBYqKIoqpA}"

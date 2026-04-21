@@ -36,7 +36,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 from agr_gender_dataset import AgrGenderDataset
 
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 @dataclass(frozen=True)

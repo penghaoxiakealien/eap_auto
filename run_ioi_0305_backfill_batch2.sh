@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Batch 2: SIH missing + DTH(0.1) missing
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0305}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0305}"
 STANDARD_FILE="${STANDARD_FILE:-${RESULTS_ROOT}/path_patching/standard_ioi_data.json}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-5}"

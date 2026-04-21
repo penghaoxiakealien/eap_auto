@@ -4,8 +4,8 @@ set -euo pipefail
 # 重跑 ioi_0305 下所有 _all 任务（新逻辑）:
 # NMH(_all) -> SIH(_all) -> DTH(_all)，并包含 NNMH(_all)。
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0307}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0307}"
 STANDARD_FILE="${STANDARD_FILE:-${RESULTS_ROOT}/path_patching/standard_ioi_data.json}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M)}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-5}"

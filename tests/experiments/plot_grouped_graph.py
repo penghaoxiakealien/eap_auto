@@ -410,23 +410,31 @@ def draw_group_graph(data: Dict[str, Any], output: Path) -> None:
 
     group_members = data.get("group_members", {}) or {}
     for group in data.get("groups", []):
-        label_lines = [group.get("id", ""), group.get("signature", ""), f"class: {group.get('classification')}" ]
-        heads = group.get("heads")
-        if heads is None:
-            heads = group_members.get(group.get("id", ""), [])
-        label_lines.append(
-            f"heads: {', '.join(heads)}"
-        )
-        summary = group.get("summary", {})
-        delta_val = summary.get("mean_delta_logit_diff")
-        if delta_val is not None:
-            label_lines.append(f"Δlogit: {delta_val:+.2f}")
+        explicit_label = group.get("label")
+        if explicit_label:
+            label_text = explicit_label
         else:
-            label_lines.append("Δlogit: n/a")
-        fill = color_map.get(group.get("classification"), "#BDBDBD")
+            label_lines = [group.get("id", "")]
+            signature = group.get("signature")
+            if signature:
+                label_lines.append(signature)
+            classification = group.get("classification")
+            if classification is not None:
+                label_lines.append(f"class: {classification}")
+            heads = group.get("heads")
+            if heads is None:
+                heads = group_members.get(group.get("id", ""), [])
+            if heads:
+                label_lines.append(f"heads: {', '.join(heads)}")
+            summary = group.get("summary", {}) or {}
+            delta_val = summary.get("mean_delta_logit_diff")
+            if delta_val is not None:
+                label_lines.append(f"Δlogit: {delta_val:+.2f}")
+            label_text = "\n".join(label_lines)
+        fill = color_map.get(group.get("classification"), group.get("fillcolor", "#BDBDBD"))
         graph.add_node(
             group.get("id"),
-            label="\n".join(label_lines),
+            label=label_text,
             shape="box",
             style="filled,rounded",
             fillcolor=fill,
@@ -448,7 +456,12 @@ def draw_group_graph(data: Dict[str, Any], output: Path) -> None:
         dst = edge.get("target") or edge.get("dst")
         if not src or not dst:
             continue
-        graph.add_edge(src, dst, label=str(edge.get("count", 1)))
+        edge_label = edge.get("label")
+        if not edge_label:
+            edge_label = str(edge.get("count", 1))
+            if edge.get("weight_abs_max") is not None:
+                edge_label += f"\n|maxΔ|={float(edge['weight_abs_max']):.3g}"
+        graph.add_edge(src, dst, label=edge_label)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     graph.draw(str(output), prog="dot")

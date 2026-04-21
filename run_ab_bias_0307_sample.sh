@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0307}"
-REF_ROOT="${REF_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0126/answer}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0307}"
+REF_ROOT="${REF_ROOT:-/home/wangziran/eap_auto/results/ioi_0126/answer}"
 PYTHON_BIN="${PYTHON_BIN:-/home/wangziran/miniconda3/envs/eap-ig/bin/python}"
 MODEL="${MODEL:-claude-sonnet-4-20250514-thinking}"
 API_KEY="${API_KEY:-sk-cdENMjpwVIpdd1Iv0auFiHizYdgnWM0ZFKhHN3UBYqKIoqpA}"
@@ -18,10 +18,10 @@ mkdir -p "${OUT_ROOT}/DTH_0.1" "${OUT_ROOT}/SIH_8.6"
 "$PYTHON_BIN" - <<'PY'
 import json, pathlib
 pairs = [
-    ("/data31/private/wangziran/eap_auto/results/ioi_0307/hypothesis/DTH/0.1_20260306_1614_all/iteration_results/iteration_1.json",
-     "/data31/private/wangziran/eap_auto/results/ioi_0307/ab_bias_check_0307_sample/DTH_0.1/initial_hypothesis.txt"),
-    ("/data31/private/wangziran/eap_auto/results/ioi_0307/hypothesis/SIH/8.6_20260306_1614_all/iteration_results/iteration_1.json",
-     "/data31/private/wangziran/eap_auto/results/ioi_0307/ab_bias_check_0307_sample/SIH_8.6/initial_hypothesis.txt"),
+    ("/home/wangziran/eap_auto/results/ioi_0307/hypothesis/DTH/0.1_20260306_1614_all/iteration_results/iteration_1.json",
+     "/home/wangziran/eap_auto/results/ioi_0307/ab_bias_check_0307_sample/DTH_0.1/initial_hypothesis.txt"),
+    ("/home/wangziran/eap_auto/results/ioi_0307/hypothesis/SIH/8.6_20260306_1614_all/iteration_results/iteration_1.json",
+     "/home/wangziran/eap_auto/results/ioi_0307/ab_bias_check_0307_sample/SIH_8.6/initial_hypothesis.txt"),
 ]
 for src, dst in pairs:
     d = json.loads(pathlib.Path(src).read_text(encoding="utf-8"))

@@ -2,7 +2,7 @@
 
 set -e
 
-BASE_DIR="/data31/private/wangziran/eap_auto"
+BASE_DIR="/home/wangziran/eap_auto"
 TASK_NAME="garden_npz_v_trans_mod"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 FIND_BEST_SCRIPT="${BASE_DIR}/pipeline/findbestedge.py"
@@ -11,7 +11,7 @@ RUN_SINGLE_SCRIPT="${BASE_DIR}/pipeline/run_single.py"
 FINAL_DATASET="${BASE_DIR}/datasets/garden/garden_npz_v_trans_mod.csv"
 RESULTS_DIR="${BASE_DIR}/results/garden/${TASK_NAME}_${TIMESTAMP}"
 
-export EAP_ROOT="/data31/private/wangziran/eap-ig"
+export EAP_ROOT="/home/wangziran/eap-ig"
 
 echo "STEP 1: 运行 findbestedge.py 寻找最佳边数..."
 # 创建结果目录

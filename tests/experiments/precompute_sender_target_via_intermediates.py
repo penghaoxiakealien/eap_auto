@@ -16,7 +16,7 @@ from transformer_lens import ActivationCache
 from ioi_dataset import IOIDataset
 
 
-LOCAL_MODEL_DIR = "/data31/private/wangziran/eap-ig/gpt2"
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 def load_model(device: str = "cuda"):
@@ -320,6 +320,7 @@ def main():
     parser.add_argument("--target_heads", help="Comma separated target heads (e.g., 9.6,9.9,10.0)")
     parser.add_argument("--sentences_file", help="Structured sentences JSONL (IOI)")
     parser.add_argument("--standard-json", help="standard_garden_data.json (Garden)")
+    parser.add_argument("--max-samples", type=int, default=0, help="Limit samples from the selected dataset (0 means all).")
     parser.add_argument("--output_file", required=True, help="Output dataset path")
     parser.add_argument("--receiver_input", type=str, default="q", help="(Deprecated) Input hook for intermediates.")
     parser.add_argument("--attention_position", type=str, default="end", help="Row of attention pattern to evaluate (e.g., end, s2).")
@@ -339,11 +340,15 @@ def main():
     use_garden = bool(args.standard_json)
     if use_garden:
         sentences = load_garden_standard(Path(args.standard_json))
+        if args.max_samples and args.max_samples > 0:
+            sentences = sentences[: args.max_samples]
         print(f"Loaded {len(sentences)} garden samples from {args.standard_json}")
     else:
         if not args.sentences_file:
             raise ValueError("Either --sentences_file or --standard-json must be provided.")
         sentences = load_structured_sentences(Path(args.sentences_file))
+        if args.max_samples and args.max_samples > 0:
+            sentences = sentences[: args.max_samples]
         print(f"Loaded {len(sentences)} sentences from {args.sentences_file}")
 
     model = load_model()

@@ -7,14 +7,17 @@ from collections import defaultdict
 
 import torch as t
 from tqdm import tqdm
-from transformer_lens import HookedTransformer, ActivationCache, utils
+from transformer_lens import HookedTransformer, ActivationCache, utils, loading_from_pretrained as loading
 from transformer_lens.hook_points import HookPoint
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from garden_dataset import GardenDataset
 from task_dataset_base import TaskDatasetBase
+
+
+LOCAL_MODEL_DIR = "/home/wangziran/gpt2"
 
 
 # ---------------- Dataclasses ---------------- #
@@ -321,7 +324,7 @@ def run_edge_path_patching(
     if not specs:
         raise ValueError("没有生成任何 EdgeSpec，检查 collapsed_graph / 参数。")
 
-    model = HookedTransformer.from_pretrained("gpt2-small", device=device)
+    model = load_model(device=device)
     model.cfg.use_split_qkv_input = True
     model.cfg.use_attn_result = True
     model.cfg.use_hook_mlp_in = True
@@ -457,9 +460,41 @@ def parse_args():
     return p.parse_args()
 
 
+def load_local_hooked_transformer(local_model_dir: str, device: str = "cuda") -> HookedTransformer:
+    tokenizer = AutoTokenizer.from_pretrained(local_model_dir, local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(local_model_dir, local_files_only=True)
+    cfg = loading.get_pretrained_model_config(
+        local_model_dir,
+        device=device,
+        local_files_only=True,
+    )
+    model = HookedTransformer(
+        cfg,
+        tokenizer=tokenizer,
+        move_to_device=False,
+    )
+    state_dict = loading.get_pretrained_state_dict(
+        local_model_dir,
+        cfg,
+        hf_model=hf_model,
+        local_files_only=True,
+    )
+    model.load_and_process_state_dict(state_dict)
+    model.move_model_modules_to_device()
+    return model
+
+
+def load_model(device: str = "cuda") -> HookedTransformer:
+    if os.path.isdir(LOCAL_MODEL_DIR):
+        print(f"🔥 正在从本地缓存加载模型: {LOCAL_MODEL_DIR}")
+        return load_local_hooked_transformer(LOCAL_MODEL_DIR, device=device)
+    print("⚠️ 未找到本地模型目录，回退到默认的 gpt2-small。")
+    return HookedTransformer.from_pretrained("gpt2-small", device=device)
+
+
 def main():
     args = parse_args()
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer = AutoTokenizer.from_pretrained(LOCAL_MODEL_DIR, local_files_only=True) if os.path.isdir(LOCAL_MODEL_DIR) else AutoTokenizer.from_pretrained("gpt2")
     ds = GardenDataset(
         tokenizer=tokenizer,
         data_path=args.data_path,

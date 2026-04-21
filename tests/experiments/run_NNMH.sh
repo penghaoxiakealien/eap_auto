@@ -12,7 +12,7 @@ CONDA_ENV="eap-ig"
 #############################################
 # 路径设定
 #############################################
-REPO_ROOT="/data31/private/wangziran/eap_auto"
+REPO_ROOT="/home/wangziran/eap_auto"
 SCRIPT_PATH="$REPO_ROOT/tests/experiments/auto_NMH.py"
 BASE_RESULTS_DIR="$REPO_ROOT/results/ioi"
 DATA_SOURCE_DIR="$BASE_RESULTS_DIR/path_patching/NNMH_${LAYER}_${HEAD}"
@@ -30,8 +30,8 @@ PREPROCESSED_ATTENTION_FILE="$DATA_SOURCE_DIR/preprocessed_attention_scores.json
 CONDA_BASE="/home/wangziran/miniconda3"
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
 conda activate "${CONDA_ENV}"
-mkdir -p /data31/private/wangziran/tmp
-export TMPDIR=/data31/private/wangziran/tmp
+mkdir -p /tmp
+export TMPDIR=/tmp
 mkdir -p "$DATA_SOURCE_DIR" "$OUTPUT_DIR"
 
 head_str="${LAYER}.${HEAD}"

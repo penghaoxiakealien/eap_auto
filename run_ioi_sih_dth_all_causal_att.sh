@@ -8,8 +8,8 @@ set -euo pipefail
 #    - SIH _causal + _att
 #    - DTH _all + _causal + _att
 
-REPO_ROOT="/data31/private/wangziran/eap_auto"
-RESULTS_ROOT="${RESULTS_ROOT:-/data31/private/wangziran/eap_auto/results/ioi_0301}"
+REPO_ROOT="/home/wangziran/eap_auto"
+RESULTS_ROOT="${RESULTS_ROOT:-/home/wangziran/eap_auto/results/ioi_0301}"
 RUN_MIDDLE="${REPO_ROOT}/tests/experiments/run_middle_head_val_size_x2.sh"
 RUN_MIDDLE_PLUS="${REPO_ROOT}/tests/experiments/run_middle_head_plus_val_size_x2.sh"
 STANDARD_FILE="${STANDARD_FILE:-${RESULTS_ROOT}/path_patching/standard_ioi_data.json}"

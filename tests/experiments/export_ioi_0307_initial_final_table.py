@@ -258,9 +258,9 @@ def write_xlsx(rows: List[Dict[str, object]], out_xlsx: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Export ioi_0307 initial-vs-final summary table.")
-    p.add_argument("--results-root", default="/data31/private/wangziran/eap_auto/results/ioi_0307")
-    p.add_argument("--reference-root", default="/data31/private/wangziran/eap_auto/results/ioi_0126/answer")
-    p.add_argument("--compare-root", default="/data31/private/wangziran/eap_auto/results/ioi_0307/compare_initial_vs_final")
+    p.add_argument("--results-root", default="/home/wangziran/eap_auto/results/ioi_0307")
+    p.add_argument("--reference-root", default="/home/wangziran/eap_auto/results/ioi_0126/answer")
+    p.add_argument("--compare-root", default="/home/wangziran/eap_auto/results/ioi_0307/compare_initial_vs_final")
     p.add_argument("--out-csv", default="")
     p.add_argument("--out-xlsx", default="")
     return p.parse_args()

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "source_json": "/data31/private/wangziran/eap_auto/results/ioi/path_patching/standard_ioi_data.json",
+    "source_json": "/home/wangziran/eap_auto/results/ioi/path_patching/standard_ioi_data.json",
     "top_k": 2,
     "heads": []
   },

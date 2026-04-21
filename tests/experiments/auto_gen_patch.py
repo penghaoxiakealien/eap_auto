@@ -10,7 +10,7 @@ import sys
 # --- 依赖项与路径设置 ---
 # 确保可以导入项目中的其他模块
 # 这个路径需要指向你项目的根目录
-sys.path.append("/data31/private/wangziran/eap_auto/") 
+sys.path.append("/home/wangziran/eap_auto/") 
 from api import OpenRouter
 from tests.experiments.ioi_dataset import IOIDataset
 from transformer_lens import HookedTransformer, utils

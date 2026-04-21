@@ -1,0 +1,2217 @@
+import asyncio
+import sys
+import json
+import os
+import copy
+import numpy as np
+import re
+import random
+import sklearn
+from collections import defaultdict
+from sklearn.metrics import ndcg_score
+import argparse
+import nltk
+from nltk.tokenize import word_tokenize
+
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:  
+    print("未找到NLTK的'punkt'分词模型，正在尝试下载...")
+    nltk.download('punkt')
+    print("下载完成。")
+    
+sys.path.append("/home/wangziran/eap_auto/")
+from api import OpenRouter
+from summarize_receiver_heads import summarize_head_group
+
+
+class TokenUsageTracker:
+    """Track API token usage by stage from appended raw_api_responses.jsonl entries."""
+
+    def __init__(self, log_path: str):
+        self.log_path = log_path
+        self.byte_offset = 0
+        self.stages = {
+            "train": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            "validation": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            "test": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            "other": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+        }
+        self.events = []
+
+    @staticmethod
+    def _normalize_usage(usage_obj):
+        if not isinstance(usage_obj, dict):
+            return 0, 0, 0
+        prompt = usage_obj.get("prompt_tokens")
+        completion = usage_obj.get("completion_tokens")
+        total = usage_obj.get("total_tokens")
+        if prompt is None:
+            prompt = usage_obj.get("input_tokens", 0)
+        if completion is None:
+            completion = usage_obj.get("output_tokens", 0)
+        if total is None:
+            total = (prompt or 0) + (completion or 0)
+        return int(prompt or 0), int(completion or 0), int(total or 0)
+
+    def consume_new(self, stage: str, label: str = ""):
+        stage_key = stage if stage in self.stages else "other"
+        if not os.path.isfile(self.log_path):
+            return
+
+        delta_prompt = 0
+        delta_completion = 0
+        delta_total = 0
+        delta_calls = 0
+
+        with open(self.log_path, "r", encoding="utf-8") as f:
+            f.seek(self.byte_offset)
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                raw = entry.get("raw_response", {})
+                usage = raw.get("usage", {}) if isinstance(raw, dict) else {}
+                p, c, t = self._normalize_usage(usage)
+                delta_prompt += p
+                delta_completion += c
+                delta_total += t
+                delta_calls += 1
+            self.byte_offset = f.tell()
+
+        self.stages[stage_key]["prompt_tokens"] += delta_prompt
+        self.stages[stage_key]["completion_tokens"] += delta_completion
+        self.stages[stage_key]["total_tokens"] += delta_total
+        self.stages[stage_key]["calls"] += delta_calls
+        self.events.append(
+            {
+                "stage": stage_key,
+                "label": label,
+                "prompt_tokens": delta_prompt,
+                "completion_tokens": delta_completion,
+                "total_tokens": delta_total,
+                "calls": delta_calls,
+            }
+        )
+
+    def summary(self):
+        total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0}
+        for vals in self.stages.values():
+            for k in total:
+                total[k] += int(vals.get(k, 0))
+        return {
+            "stages": self.stages,
+            "total": total,
+            "events": self.events,
+            "notes": "usage comes from raw_api_responses.jsonl entries emitted by api.py",
+        }
+
+async def parse_arguments():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description="Run automated hypothesis generation and refinement for a given attention head.")
+    parser.add_argument("--layer", type=int, required=True, help="The sender head's layer.")
+    parser.add_argument("--head", type=int, required=True, help="The sender head's number.")
+    parser.add_argument("--rounds", type=int, default=1, help="(Deprecated) Kept for compatibility; no longer used for file naming.")
+    parser.add_argument("--typename", type=str, default="", help="(Deprecated) Head typename label for prompt context.")
+    parser.add_argument("--output_dir", type=str, required=True, help="Directory to save outputs.")
+    parser.add_argument(
+        "--causal_dataset",
+        type=str,
+        default=os.path.join(os.path.dirname(__file__), "..", "..", "results", "ioi", "path_patching", "causal_dataset.json"),
+        help="Path to the causal dataset JSON containing diff_vectors (default: global causal_dataset.json).",
+    )
+    parser.add_argument(
+        "--receiver_heads",
+        type=str,
+        default="",
+        help="Comma-separated downstream heads (e.g., '10.7,11.10') for contextual prompts.",
+    )
+    parser.add_argument(
+        "--intermediate-heads",
+        type=str,
+        default="",
+        help="Comma-separated intermediate heads (B) for A->B->C prompts.",
+    )
+    parser.add_argument(
+        "--receiver_descriptions_file",
+        type=str,
+        default="",
+        help="Optional JSON file mapping receiver head strings to textual descriptions.",
+    )
+    parser.add_argument(
+        "--optimize-only",
+        choices=["dual", "causal", "attention"],
+        default="dual",
+        help="Refinement focus during iterations (dual=causal+attention, causal=only causal, attention=only attention).",
+    )
+    parser.add_argument(
+        "--strict-causal-batch",
+        action="store_true",
+        help="If set, causal batch prediction runs once with no retry/fallback and fails immediately on invalid format.",
+    )
+    parser.add_argument(
+        "--attention-position",
+        type=str,
+        default="end",
+        help="Query position used for direct attention evidence (e.g., end, s2).",
+    )
+    parser.add_argument(
+        "--validate-every",
+        type=int,
+        default=2,
+        help="Run validation every N epochs.",
+    )
+    parser.add_argument(
+        "--validation-sample-size",
+        type=int,
+        default=0,
+        help="Validation sentences per checkpoint (0 means full validation split).",
+    )
+    parser.add_argument(
+        "--test-sample-size",
+        type=int,
+        default=0,
+        help="Test sentences for final evaluation (0 means full test split).",
+    )
+    parser.add_argument(
+        "--test-all-validations",
+        action="store_true",
+        help="Evaluate every validation checkpoint hypothesis on the test split.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-5-chat",
+        help="OpenRouter model name.",
+    )
+    parser.add_argument(
+        "--causal-direction",
+        choices=["increase", "decrease"],
+        required=True,
+        help="Single-sided causal direction to optimize and score.",
+    )
+    return parser.parse_args()
+
+def split_dataset(full_dataset, train_split=0.4, validation_split=0.2, seed=42):
+    """将完整数据集确定性地划分为训练/验证/测试集"""
+    test_split = 1.0 - train_split - validation_split
+    if test_split < 0:
+        raise ValueError("Split ratios must sum to <= 1.0")
+    print(
+        f"将数据集划分为 {train_split:.0%} 训练集、{validation_split:.0%} 验证集、{test_split:.0%} 测试集..."
+    )
+    sentence_ids = list(full_dataset.keys())
+
+    train_end = int(len(sentence_ids) * train_split)
+    val_end = int(len(sentence_ids) * (train_split + validation_split))
+    train_ids = sentence_ids[:train_end]
+    validation_ids = sentence_ids[train_end:val_end]
+    test_ids = sentence_ids[val_end:]
+
+    train_dataset = {sid: full_dataset[sid] for sid in train_ids}
+    validation_dataset = {sid: full_dataset[sid] for sid in validation_ids}
+    test_dataset = {sid: full_dataset[sid] for sid in test_ids}
+
+    print(
+        f"训练集大小: {len(train_dataset)}, 验证集大小: {len(validation_dataset)}, 测试集大小: {len(test_dataset)}"
+    )
+    return train_dataset, validation_dataset, test_dataset
+
+
+def chunk_dict(data_dict, chunk_size):
+    """按固定大小切分字典，保持顺序。"""
+    items = list(data_dict.items())
+    return [dict(items[i:i + chunk_size]) for i in range(0, len(items), chunk_size)]
+def initialize_openrouter(model: str = "gpt-5-chat"):
+    """初始化OpenRouter API"""
+    api_key = "sk-Z3pwy4dD8WY2XZlbzch66NP5hQIoFKeU7KvI2XD8bQSyFVGO"
+    # api_key = "sk-99F0IFe53pSHOPQ3phWbEAEx86ZDOqkE58Ov9aYCS9AOQ2C7"
+    # api_key = "sk-ssCRXZzlj8qhPNs6Ps2BxTXZQXq97vJvKATpFXdwYV0E0gUO"
+    # api_key = "sk-cdENMjpwVIpdd1Iv0auFiHizYdgnWM0ZFKhHN3UBYqKIoqpA"
+    return OpenRouter(model=model, api_key=api_key)
+
+def extract_hypothesis_text(response_text):
+    """从LLM的响应中提取[HYPOTHESIS]部分"""
+    tag_re = re.compile(
+        r"(?im)^\s*(?:\d+\s*[.)]\s*)?(?:[-*]\s*)?(?:\*\*\s*)?\[HYPOTHESIS\]\s*[:：]?(?:\s*\*\*)?\s*"
+    )
+    fallback_tag_re = re.compile(
+        r"(?i)(?:\*\*\s*)?\[HYPOTHESIS\]\s*[:：]?(?:\s*\*\*)?\s*"
+    )
+    next_tag_re = re.compile(
+        r"(?im)^\s*(?:\d+\s*[.)]\s*)?(?:[-*]\s*)?(?:\*\*\s*)?\[[A-Z_]+\]\s*[:：]?(?:\s*\*\*)?"
+    )
+    match = tag_re.search(response_text) or fallback_tag_re.search(response_text)
+    if match:
+        tail = response_text[match.end() :].strip()
+        next_tag = next_tag_re.search(tail)
+        if next_tag:
+            tail = tail[: next_tag.start()].strip()
+        return tail
+    print("警告: 在LLM响应中未找到 '[HYPOTHESIS]:' 标签。")
+    return response_text.strip() # 作为后备，返回全部文本
+
+def normalize_token(token):
+    """标准化token用于比较"""
+    return token.strip().lower()
+
+def compute_composite_score(causal_f1, attention_f1, attention_ndcg):
+    """计算综合分数（用于验证集比较）：sqrt(causal_f1 * attention_f1)。"""
+    c = float(causal_f1 or 0.0)
+    a = float(attention_f1 or 0.0)
+    if c > 0 and a > 0:
+        return (c * a) ** 0.5
+    return 0.0
+
+
+def get_causal_direction_semantics(causal_direction):
+    if causal_direction == "increase":
+        return {
+            "label": "increase",
+            "effect_verb": "increases",
+            "normal_effect": "suppresses",
+            "prediction_task": "predict which tokens gain downstream attention after corruption",
+            "feedback_name": "increase-side causal effect",
+        }
+    return {
+        "label": "decrease",
+        "effect_verb": "decreases",
+        "normal_effect": "promotes",
+        "prediction_task": "predict which tokens lose downstream attention after corruption",
+        "feedback_name": "decrease-side causal effect",
+    }
+
+
+def select_direction_tokens(entry, causal_direction):
+    if not isinstance(entry, dict):
+        return []
+    return list(entry.get(causal_direction, []) or [])
+
+# --- 阶段一：从数据生成初始假设 ---
+
+def get_causal_effects_for_sampling(sampled_sentences, sender_head, top_k=1):
+    """
+    为一批抽样的句子，逐句计算其真实的因果效应。
+    """
+    causal_examples = []
+    print(f"正在为 {len(sampled_sentences)} 个抽样句子，逐句计算真实的因果效应...")
+
+    for sid, data in sampled_sentences.items():
+        real_diffs = data.get('diff_vectors', {})
+        tokens = data.get('tokens', [])
+        if not real_diffs or not tokens:
+            continue
+
+        # 计算该句子上sender到所有receiver的平均效应
+        sentence_vectors = [np.array(v) for k, v in real_diffs.items() if k.startswith(f"{sender_head[0]}.{sender_head[1]}->") and v]
+        if not sentence_vectors:
+            continue
+
+        # 确保长度一致
+        min_len = min(len(v) for v in sentence_vectors)
+        avg_diff_vector = np.mean([v[:min_len] for v in sentence_vectors], axis=0)
+        
+        tokens_padded = tokens[:min_len]
+        token_changes = sorted(zip(tokens_padded, avg_diff_vector), key=lambda x: x[1], reverse=True)
+        
+        # 找出效应最强的token
+        increase_tokens = [normalize_token(t) for t, s in token_changes[:top_k]]
+        decrease_tokens = [normalize_token(t) for t, s in token_changes[-top_k:]]
+        
+        causal_examples.append({
+            "sentence_text": data['sentence_text'],
+            "increase_tokens": increase_tokens,
+            "decrease_tokens": decrease_tokens
+        })
+        
+    return causal_examples
+
+
+def get_direct_attention_examples_for_sampling(sampled_sentences, attention_ground_truth, top_k=2):
+    """从抽样句子中提取 sender head 的直接注意力证据（Top-K token + score）。"""
+    examples = []
+    if not attention_ground_truth:
+        return examples
+    for sid, data in sampled_sentences.items():
+        gt = attention_ground_truth.get(sid)
+        if not gt:
+            continue
+        sentence_text = data.get("sentence_text", "")
+        tokens = gt.get("tokens", [])[:top_k]
+        scores = gt.get("scores", [])[:top_k]
+        token_scores = []
+        for i, tok in enumerate(tokens):
+            sc = scores[i] if i < len(scores) else 0.0
+            token_scores.append((tok, float(sc)))
+        examples.append({
+            "sentence_text": sentence_text,
+            "top_tokens": token_scores,
+        })
+    return examples
+
+
+async def generate_initial_hypothesis(
+    open_router,
+    sender_head,
+    causal_examples,
+    direct_attention_examples,
+    causal_direction,
+    query_position,
+    optimize_only,
+    explanation,
+    output_dir,
+):
+    """
+    根据一批具体的因果效应示例，生成初始假设。
+    """
+    print(f"为头 {sender_head} 生成初始假设...")
+    causal_semantics = get_causal_direction_semantics(causal_direction)
+    
+    # 动态构建示例字符串
+    examples_str = ""
+    for i, ex in enumerate(causal_examples, 1):
+        direction_tokens = ex[f"{causal_direction}_tokens"]
+        examples_str += (
+            f"**Example {i}:**\n"
+            f"- **Sentence:** \"{ex['sentence_text']}\"\n"
+            f"- **Result:** Corrupting the sender path causes downstream attention to {causal_semantics['effect_verb'].upper()} on `{direction_tokens}`.\n\n"
+        )
+
+    direct_attention_str = ""
+    for i, ex in enumerate(direct_attention_examples, 1):
+        top_tokens = ex.get("top_tokens", [])
+        if top_tokens:
+            rendered = ", ".join([f"({tok}, {score:.2f})" for tok, score in top_tokens])
+        else:
+            rendered = "N/A"
+        direct_attention_str += (
+            f"**Direct Attention Example {i}:**\n"
+            f"- **Sentence:** \"{ex['sentence_text']}\"\n"
+            f"- **Sender direct attention at query position `{query_position}` (Top-{len(top_tokens) if top_tokens else 0}):** {rendered}\n\n"
+        )
+
+    include_causal = optimize_only != "attention"
+    include_attention = optimize_only != "causal"
+
+    system_prompt = (
+        "You are conducting an important investigation into patterns found in language. "
+        "The text is based on the Indirect Object Identification (IOI) task, where the model is asked to identify the indirect object "
+        "from the first half of a sentence and predict the next token of an uncompleted sentence to be the indirect object.\n\n"
+        "**Key IOI positions you must use:**\n"
+        "- **IO:** the indirect object (recipient)\n"
+        "- **S1:** the subject token in the earlier clause\n"
+        "- **S2:** the subject token in the main transfer clause\n"
+        "Also consider clause boundaries and modifiers (e.g., relative clauses) when identifying roles.\n\n"
+        "Example (for grounding only):\n"
+        "\"After the meeting, Emily and Michael went to the cafe. Michael handed a letter to\"\n"
+        "- IO: Emily\n"
+        "- S1: Michael\n"
+        "- S2: Michael\n\n"
+        "Important: The head may help OR hurt the task; do not assume it is beneficial by default."
+    )
+
+    evidence_context = ""
+    if include_causal:
+        evidence_context += (
+            "**Crucial Interpretability Context (Path Patching — read carefully):**\n"
+            "The data below comes from path patching experiments that isolate the causal effect of a specific path.\n\n"
+            "What path patching means here:\n"
+            "- We run the model on a CLEAN input and on a CORRUPTED input.\n"
+            "- We cache activations from both runs.\n"
+            "- We then re-run the clean input, but along a specific path we REPLACE the clean activations with the corresponding CORRUPTED activations.\n"
+            "- This replacement isolates the causal effect of that path.\n\n"
+            "What we measure:\n"
+            "- We measure how DOWNSTREAM receiver/target heads' attention patterns change after this replacement.\n"
+            f"- The reported {causal_semantics['label'].upper()} refers to changes in the downstream heads' attention, not the sender head's own attention.\n\n"
+            "Direction interpretation (use this exactly):\n"
+            f"- A downstream-attention **{causal_semantics['label'].upper()}** means the sender head normally **{causal_semantics['normal_effect'].upper()}** downstream attention to those tokens.\n\n"
+            "Single-hop vs two-hop interpretation:\n"
+            "- SINGLE-HOP (A→B): we patch the A→B path and measure the change at B.\n"
+            "- TWO-HOP (A→B→C): we patch the A→B path but measure the change at C, i.e., A affects C THROUGH B.\n\n"
+        )
+    if include_attention:
+        evidence_context += (
+            f"**Sender Direct Attention Evidence (same sender head, query position = `{query_position}`):**\n"
+            "These observations show what tokens this sender head itself directly attends to at the specified query row.\n\n"
+        )
+
+    sample_format = ""
+    if include_causal:
+        sample_format = (
+            "**Sample Format (important):**\n"
+            "Each sample is a causal observation in this exact form:\n"
+            "- Sentence: \"...\"\n"
+            f"- Result: Corrupting/patching the sender path causes downstream attention to {causal_semantics['effect_verb'].upper()} on [...].\n"
+            f"Treat the {causal_semantics['label'].upper()} token set as the primary evidence.\n\n"
+        )
+
+    evidence_blocks = ""
+    if include_attention:
+        evidence_blocks += direct_attention_str
+    if include_causal:
+        evidence_blocks += examples_str
+
+    main_guidance = (
+        f"- Connect what the head likely attends to with why it normally {causal_semantics['normal_effect']} downstream attention to those tokens.\n"
+        if include_causal
+        else "- Focus on the sender head's direct attention pattern and what behavior it likely supports in IOI.\n"
+    )
+
+    user_prompt = (
+        f"**Your task is to provide a rational hypothesis that thoroughly explains the function of the given attention head {sender_head} in this specific task based on the concrete experimental evidence below.**\n\n"
+        "The samples may not explicitly annotate the indirect object. You should infer IO / S1 / S2 from context and sentence structure.\n\n"
+        f"**Downstream Head Context (may include summaries for intermediate/target groups):**\n{explanation}\n\n"
+        "**Hop Type:**\n"
+        "- If intermediate heads are provided, treat this as a TWO-HOP setting (A→B→C).\n"
+        "- Otherwise, treat this as a SINGLE-HOP setting (A→B).\n\n"
+        f"{evidence_context}"
+        f"{sample_format}"
+        "--- **Experimental Evidence (10 Sequential Samples)** ---\n"
+        "Here are the results from 10 sequentially sampled sentences from the training split. Your task is to find a single, unified rule that explains all these examples.\n\n"
+        f"{evidence_blocks}"
+        "**Your Task & Guidelines:**\n"
+        "- Synthesize, don't just list examples.\n"
+        "- Use IO / S1 / S2 and clause structure explicitly.\n"
+        f"{main_guidance}"
+        "- The head may help OR hurt the task; do not assume it is beneficial.\n"
+        "- Keep it compact: the final hypothesis should be 3–5 sentences in one paragraph.\n\n"
+        "**Response Format (Strict):**\n"
+        "1. **[HYPOTHESIS]:** Start with this exact tag. The colon is mandatory (must be `[HYPOTHESIS]:`).\n"
+        "   Do not output extra sections; provide only one concise paragraph hypothesis."
+    )
+
+    prompt = f"---SYSTEM PROMPT---\n{system_prompt}\n\n---USER PROMPT---\n{user_prompt}"
+    
+    messages = [
+        {"role": "system", "content": system_prompt}, 
+        {"role": "user", "content": user_prompt}
+    ]
+    response = await open_router.generate(messages=messages, output_dir=output_dir)
+    
+    hypothesis = extract_hypothesis_text(response.text)
+    print("初始假设已生成:", hypothesis)
+    return hypothesis, prompt
+
+# --- 阶段二：迭代验证与精炼 ---
+
+async def predict_top_k_attenders_for_sentence(open_router, hypothesis, sid, sentence_data, sender_head, top_k, output_dir):
+    """逐句预测 Top-K 注意力 token（批量失败时回退使用）。"""
+    sentence_text = sentence_data.get("sentence_text", "")
+    if not sentence_text:
+        return sid, {"predicted_tokens": []}
+
+    system_prompt = (
+        "You are predicting direct attention targets for one attention head in IOI.\n"
+        "Task:\n"
+        f"- Highlight exactly {top_k} tokens using <<token>>.\n"
+        "- Keep original sentence unchanged except << >> markers.\n"
+        "- Return one line: `sentence_id: marked sentence`.\n"
+        "- Do not output explanations.\n"
+    )
+    user_prompt = (
+        f"Hypothesis for sender head {sender_head}:\n{hypothesis}\n\n"
+        f"Sentence to annotate (exactly {top_k} highlighted tokens):\n"
+        f"{sid}: {sentence_text}\n"
+    )
+    response = await open_router.generate(
+        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+        output_dir=output_dir,
+    )
+
+    candidate = ""
+    for raw in response.text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("`") and line.endswith("`"):
+            line = line[1:-1].strip()
+        if line.startswith(f"{sid}:"):
+            candidate = line
+
+    inc_tokens, _ = _parse_and_suffix_tokens(sentence_text, candidate)
+    return sid, {"predicted_tokens": inc_tokens[:top_k]}
+
+
+async def predict_top_k_attenders_batch(open_router, hypothesis, sentences_data, sender_head, top_k, output_dir):
+    """
+    批量预测一组句子的 Top-K 直接注意力 token（一次请求多句，逻辑对齐 auto_NMH.py）。
+    返回: {sid: {"predicted_tokens": [...]}}
+    """
+    if not sentences_data:
+        return {}
+
+    sid_to_text = {str(sid): data["sentence_text"] for sid, data in sentences_data.items() if data.get("sentence_text")}
+    if not sid_to_text:
+        return {}
+
+    examples = "\n".join([f"{sid}: {text}" for sid, text in sid_to_text.items()])
+
+    system_prompt = (
+        "You are predicting direct attention targets for one attention head in IOI.\n"
+        "You will receive a hypothesis and multiple sentences.\n\n"
+        "Task:\n"
+        f"- For EACH sentence, highlight exactly {top_k} tokens using <<token>>.\n"
+        "- Highlight each token occurrence separately (position-sensitive).\n"
+        "- Keep the original sentence text unchanged except adding << >> markers.\n"
+        "- Return ONLY one line per sentence in the format: `sentence_id: marked sentence`.\n"
+        "- Do not output explanations.\n"
+    )
+
+    user_prompt = (
+        f"Hypothesis for sender head {sender_head}:\n{hypothesis}\n\n"
+        f"Sentences to annotate (exactly {top_k} highlighted tokens per sentence):\n"
+        f"{examples}\n"
+    )
+
+    def _extract_line_for_sid(text, sid):
+        candidate = None
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            if line.startswith("`") and line.endswith("`"):
+                line = line[1:-1].strip()
+            if line.startswith(f"{sid}:"):
+                candidate = line
+        return candidate
+
+    response = await open_router.generate(
+        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+        output_dir=output_dir,
+    )
+    text = response.text.strip()
+    parsed = {}
+    valid = True
+
+    for sid, sentence_text in sid_to_text.items():
+        line = _extract_line_for_sid(text, sid)
+        if not line:
+            valid = False
+            break
+        inc_tokens, _ = _parse_and_suffix_tokens(sentence_text, line)
+        if len(inc_tokens) != top_k:
+            valid = False
+            break
+        parsed[sid] = {"predicted_tokens": inc_tokens}
+
+    if valid:
+        return parsed
+
+    # 回退到逐句预测（一次批量失败即回退）
+    fallback = {}
+    tasks = [
+        predict_top_k_attenders_for_sentence(open_router, hypothesis, sid, data, sender_head, top_k, output_dir)
+        for sid, data in sentences_data.items()
+    ]
+    results = await asyncio.gather(*tasks)
+    for sid, result in results:
+        fallback[sid] = result
+    return fallback
+
+def _get_suffixed_word_map(original_text):
+    """辅助函数：为句子的每个词生成带后缀的映射。"""
+    words = re.findall(r"\w+|[^\w\s]", original_text)
+    global_counts = defaultdict(int)
+    for w in words:
+        global_counts[normalize_token(w)] += 1
+    
+    running_counts = defaultdict(int)
+    suffixed_map = {}
+    for i, word in enumerate(words):
+        norm_word = normalize_token(word)
+        running_counts[norm_word] += 1
+        if global_counts[norm_word] > 1:
+            suffixed_map[i] = f"{word.strip()}_{running_counts[norm_word]}"
+        else:
+            suffixed_map[i] = word.strip()
+    return words, suffixed_map
+
+def _suffix_tokens_with_sentence(tokens, sentence_text):
+    """根据原句为token补齐后缀，确保与预测侧一致。"""
+    if not tokens or not sentence_text:
+        return tokens
+
+    def already_suffixed(token):
+        return bool(re.search(r"_[0-9]+$", token))
+
+    try:
+        words, suffixed_map = _get_suffixed_word_map(sentence_text)
+    except LookupError:
+        return tokens
+
+    occurrences = defaultdict(list)
+    for idx, word in enumerate(words):
+        suffixed = suffixed_map.get(idx)
+        if suffixed:
+            occurrences[normalize_token(word)].append(suffixed)
+
+    usage = defaultdict(int)
+    suffixed_tokens = []
+    for token in tokens:
+        if already_suffixed(token):
+            suffixed_tokens.append(token)
+            continue
+        norm = normalize_token(token)
+        available = occurrences.get(norm)
+        if not available:
+            suffixed_tokens.append(token)
+            continue
+        pos = usage[norm]
+        if pos >= len(available):
+            pos = len(available) - 1
+        suffixed_tokens.append(available[pos])
+        usage[norm] += 1
+    return suffixed_tokens
+
+def evaluate_top_k_predictions(predictions, attention_ground_truth, top_k):
+    """
+    【已修改】评估直接注意力预测，同时计算NDCG和F1分数。
+    """
+    total_ndcg = 0
+    # --- 新增F1分数计算所需变量 ---
+    total_correct_tokens = 0
+    total_predicted_tokens = 0
+    total_real_tokens = 0
+    
+    feedback_details = []
+    count = 0
+
+    for sid, pred_data in predictions.items():
+        if sid not in attention_ground_truth: continue
+        
+        gt_data = attention_ground_truth[sid]
+        
+        if not gt_data.get('tokens') or not gt_data.get('scores'): continue
+        all_tokens_with_scores = sorted(zip(gt_data['tokens'], gt_data['scores']), key=lambda x: x[1], reverse=True)
+        real_top_k_tokens = [token for token, score in all_tokens_with_scores[:top_k]]
+        
+        predicted_tokens = pred_data.get('predicted_tokens', [])
+        if not real_top_k_tokens: continue
+
+        # 计算NDCG分数
+        relevance_map = {token: (top_k - i) for i, token in enumerate(real_top_k_tokens)}
+        true_relevance = np.asarray([[relevance_map.get(t, 0) for t in real_top_k_tokens]])
+        pred_relevance = np.asarray([[relevance_map.get(t, 0) for t in predicted_tokens]])
+        max_len = max(true_relevance.shape[1], pred_relevance.shape[1])
+        if max_len > 0:
+            true_relevance_padded = np.pad(true_relevance, ((0, 0), (0, max_len - true_relevance.shape[1])))
+            pred_relevance_padded = np.pad(pred_relevance, ((0, 0), (0, max_len - pred_relevance.shape[1])))
+            ndcg = ndcg_score(true_relevance_padded, pred_relevance_padded, k=top_k)
+        else:
+            ndcg = 0.0
+        total_ndcg += ndcg
+        count += 1
+        
+        # 为计算F1分数累加计数
+        pred_set = set(predicted_tokens)
+        real_set = set(real_top_k_tokens)
+        
+        total_correct_tokens += len(pred_set.intersection(real_set))
+        total_predicted_tokens += len(pred_set)
+        total_real_tokens += len(real_set)
+
+        original_sentence_text = gt_data['sentence_text']
+        feedback_details.append(
+            f"Sentence_id: {sid}; "
+            f"Sentence: {original_sentence_text}; "
+            f"Your prediction: Attention: {sorted(pred_set)}; "
+            f"Answer: Attention: {sorted(real_set)}"
+        )
+
+    avg_ndcg = total_ndcg / count if count > 0 else 0
+    
+    # --- 新增：计算最终的F1分数 ---
+    precision = total_correct_tokens / total_predicted_tokens if total_predicted_tokens > 0 else 0
+    recall = total_correct_tokens / total_real_tokens if total_real_tokens > 0 else 0
+    avg_f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    final_feedback = "\n".join(feedback_details)
+    
+    # --- 【已修改】返回三个值 ---
+    return avg_ndcg, avg_f1, final_feedback
+
+def sample_sentences_from_causal_dataset(causal_data, batch_size=5, start_idx=0):
+    """从 causal_dataset 中按顺序取句子及其相关数据。"""
+    sentence_ids = list(causal_data.keys())
+    if not sentence_ids:
+        return {}, start_idx
+    if len(sentence_ids) < batch_size or batch_size <= 0:
+        if len(sentence_ids) < batch_size:
+            print(f"警告: 数据集中的句子总数({len(sentence_ids)})少于请求的batch_size({batch_size})。将使用所有句子。")
+        sampled_ids = sentence_ids
+    else:
+        start = start_idx % len(sentence_ids)
+        end = start + batch_size
+        if end <= len(sentence_ids):
+            sampled_ids = sentence_ids[start:end]
+        else:
+            sampled_ids = sentence_ids[start:] + sentence_ids[: end % len(sentence_ids)]
+
+    sampled_sentences = {sid: causal_data[sid] for sid in sampled_ids}
+    next_idx = (start_idx + len(sampled_ids)) % len(sentence_ids)
+    return sampled_sentences, next_idx
+
+def build_causal_ground_truth(causal_data, sender_head, top_k=1):
+    """为整个因果数据集生成 increase/decrease 真值."""
+    all_gt = {}
+    sender_prefix = f"{sender_head[0]}.{sender_head[1]}->"
+    for sid, data in causal_data.items():
+        real_diffs = data.get("diff_vectors", {})
+        tokens = data.get("tokens", [])
+        if not real_diffs or not tokens:
+            continue
+
+        sentence_vectors = [
+            np.array(v) for k, v in real_diffs.items() if k.startswith(sender_prefix) and v
+        ]
+        if not sentence_vectors:
+            continue
+
+        min_len = min(len(v) for v in sentence_vectors)
+        avg_diff_vector = np.mean([v[:min_len] for v in sentence_vectors], axis=0)
+        original_sentence_text = data.get("sentence_text", "")
+        if not original_sentence_text:
+            continue
+
+        _, suffixed_map = _get_suffixed_word_map(original_sentence_text)
+        suffixed_token_changes = []
+        for i in range(min_len):
+            suffixed_token = suffixed_map.get(i)
+            if suffixed_token:
+                suffixed_token_changes.append((suffixed_token, avg_diff_vector[i]))
+
+        suffixed_token_changes.sort(key=lambda x: x[1], reverse=True)
+        increase_tokens = [t for t, _ in suffixed_token_changes[:top_k]]
+        decrease_tokens = [t for t, _ in suffixed_token_changes[-top_k:]]
+
+        all_gt[str(sid)] = {
+            "sentence_text": data.get("sentence_text", ""),
+            "increase": increase_tokens,
+            "decrease": decrease_tokens,
+        }
+    return all_gt
+
+def build_attention_ground_truth(attention_ground_truth, top_k=2):
+    """将注意力真值整理为 top-k 形式，便于输出查看."""
+    all_gt = {}
+    for sid, data in attention_ground_truth.items():
+        tokens = data.get("tokens", [])
+        scores = data.get("scores", [])
+        if not tokens or not scores:
+            continue
+        all_tokens_with_scores = sorted(zip(tokens, scores), key=lambda x: x[1], reverse=True)
+        top_tokens = [tok for tok, _ in all_tokens_with_scores[:top_k]]
+        all_gt[str(sid)] = {
+            "sentence_text": data.get("sentence_text", ""),
+            "top_k_tokens": top_tokens,
+        }
+    return all_gt
+
+
+def _extract_attn_truth_top_k(entry, top_k=2):
+    if not entry:
+        return None
+    tokens = entry.get("tokens", [])
+    scores = entry.get("scores", [])
+    if tokens and scores:
+        pairs = sorted(zip(tokens, scores), key=lambda x: x[1], reverse=True)
+        return [tok for tok, _ in pairs[:top_k]]
+    if entry.get("top_k_tokens"):
+        return entry.get("top_k_tokens", [])[:top_k]
+    if entry.get("important_tokens"):
+        return entry.get("important_tokens", [])[:top_k]
+    return None
+
+
+def build_standard_details(
+    sentence_ids,
+    sentence_source,
+    causal_preds=None,
+    causal_truth=None,
+    causal_direction=None,
+    attn_preds=None,
+    attn_truth=None,
+    top_k_attn=2,
+):
+    details = []
+    for sid in sentence_ids:
+        sid_str = str(sid)
+        sentence_text = ""
+        if isinstance(sentence_source, dict) and sid in sentence_source:
+            sentence_text = sentence_source[sid].get("sentence_text", "")
+        elif isinstance(sentence_source, dict) and sid_str in sentence_source:
+            sentence_text = sentence_source[sid_str].get("sentence_text", "")
+
+        causal_predic = None
+        if isinstance(causal_preds, dict):
+            cp = causal_preds.get(sid) if sid in causal_preds else causal_preds.get(sid_str)
+            if isinstance(cp, dict) and causal_direction:
+                causal_predic = {
+                    "direction": causal_direction,
+                    "tokens": cp.get("predicted_tokens", []),
+                }
+            else:
+                causal_predic = cp
+
+        causal_truth_item = None
+        if isinstance(causal_truth, dict):
+            ct = causal_truth.get(sid) if sid in causal_truth else causal_truth.get(sid_str)
+            if isinstance(ct, dict) and causal_direction:
+                causal_truth_item = {
+                    "direction": causal_direction,
+                    "tokens": ct.get("tokens", []),
+                }
+            else:
+                causal_truth_item = ct
+
+        attn_predic = None
+        if isinstance(attn_preds, dict):
+            ap = attn_preds.get(sid) if sid in attn_preds else attn_preds.get(sid_str)
+            if isinstance(ap, dict):
+                if "predicted_tokens" in ap:
+                    attn_predic = ap.get("predicted_tokens", [])[:top_k_attn]
+                elif "important_tokens" in ap:
+                    attn_predic = ap.get("important_tokens", [])[:top_k_attn]
+
+        attn_truth_item = None
+        if isinstance(attn_truth, dict):
+            at = attn_truth.get(sid) if sid in attn_truth else attn_truth.get(sid_str)
+            attn_truth_item = _extract_attn_truth_top_k(at, top_k=top_k_attn)
+
+        details.append({
+            "sentence_id": sid_str,
+            "sentence_text": sentence_text,
+            "causal_predic": causal_predic,
+            "causal_truth": causal_truth_item,
+            "attn_predic": attn_predic,
+            "attn_truth": attn_truth_item,
+        })
+    return details
+
+async def predict_for_single_sentence(open_router, hypothesis, sid, sentence_data, sender_head, top_k, causal_direction, output_dir):
+    """
+    为单个句子生成预测，包含完整的Prompt和推理过程。
+    """
+    sentence_text = sentence_data['sentence_text']
+    causal_semantics = get_causal_direction_semantics(causal_direction)
+
+    system_prompt = (
+        "You are applying a hypothesis to predict experimental outcomes in an IOI task. Your task is to predict how corrupting a 'Sender Head' will change the attention of a 'Receiver Head'.\n\n"
+        "**--- Key Concepts in the IOI Task (Crucial Background) ---**\n"
+        "To understand the hypothesis, you must know these linguistic roles in the context of a sentence. However, in an IOI task, we may not provide the whole sentence, which means that IO at the end of the sentence may be hidden for prediction. For example, \"John and Mary went to the park. John gave a backpack to Mary.\"\n"
+        "In this sentence:"
+        "- **Subject (S):** The one performing the action. (e.g., 'John' gave the backpack).\n"
+        "- **Indirect Object (IO):** The recipient of the action. Although the token is not provided directly at the end of the sentence, but you can infer from the context.(e.g., 'Mary' received the backpack).\n"
+        "- **Direct Object (DO):** The object being transferred. (e.g., 'a backpack').\n"
+        "The IOI task is about correctly identifying the **Indirect Object (IO)**.\n\n"
+        "--- **Core Task & Causal Rules** ---\n"
+        f"Your task is to predict which token(s) show downstream-attention **{causal_semantics['effect_verb'].upper()}** after corrupting Sender Head {sender_head}, according to the hypothesis.\n\n"
+        f"A downstream-attention **{causal_semantics['label'].upper()}** means the sender head normally **{causal_semantics['normal_effect'].upper()}** downstream attention to those tokens.\n\n"
+        "**MUST FOLLOW RULES:**\n"
+        "- Mark predicted tokens with `<<token>>`.\n"
+        f"- **Exact Count:** You must highlight exactly {top_k} token(s).\n"
+        "- **No Modification:** Do not omit, add, or change any part of the original sentence text.\n"
+        "- **Strict Formatting:** Provide the final marked sentence in a `[PREDICTION]` block.\n\n"
+    )
+    user_prompt = (
+        "--- **Illustrative Example (How to perform the task):** ---\n"
+        "To ensure you understand the method, here is a complete, self-contained example. **DO NOT use the functions or entities from this example for your real task.**\n\n"
+        "**Fictional Scenario:**\n"
+        "- We are studying how a fictional **Sender Head 0.0** affects a fictional **Receiver Head 0.1**.\n"
+        "- **Known function of Receiver Head 0.1:** It is a 'Verb Detector Head'. It tries to pay high attention to verbs in a sentence.\n"
+        f"- **Hypothetical Hypothesis for Sender Head 0.0:** 'Sender Head 0.0 normally {causal_semantics['normal_effect']} a specific class of tokens in the downstream head, so corrupting it makes those tokens show attention {causal_semantics['effect_verb']}.'\n\n"
+        "**Example Sentence:** `ioi_9999: After the game, he was tired but she gave him a water bottle.`\n\n"
+        "**Correct Output for this Fictional Example:**\n"
+        "`ioi_9999: After the game, he was tired but she <<gave>> him a water bottle.`\n"
+        "--- End of Example ---\n\n"
+        "**Your Turn:"
+        f"**Hypothesis:** {hypothesis}\n"
+        "Now, using the **actual hypothesis for Head {sender_head}**, apply it to the following sentence.\n\n"
+        f"**Sentence to Analyze:**\n`{sid}: {sentence_text}`"
+    )
+    messages = [
+        {"role": "system", "content": system_prompt}, 
+        {"role": "user", "content": user_prompt}
+    ]
+    response = await open_router.generate(messages=messages, output_dir=output_dir)
+    
+    response_text = response.text.strip()
+    
+    prediction_matches = re.findall(r"\[PREDICTION\]\s*(.*)", response_text, re.DOTALL | re.IGNORECASE)
+
+    marked_sentence = prediction_matches[-1].strip() if prediction_matches else ""
+    # If multiple prediction lines exist, keep the last line that matches the sentence key.
+    if marked_sentence:
+        candidate_line = None
+        for line in marked_sentence.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("`") and line.endswith("`"):
+                line = line[1:-1].strip()
+        if line.startswith(f"{sid}:"):
+            candidate_line = line
+        if candidate_line:
+            marked_sentence = candidate_line
+    
+    predicted_tokens = _parse_single_marked_tokens(sentence_text, marked_sentence)
+    
+    return sid, {
+        "predicted_tokens": predicted_tokens[:top_k],
+    }
+
+
+async def predict_for_sentence_batch(open_router, hypothesis, sentences_data, sender_head, top_k, causal_direction, output_dir, max_retries=1, strict_mode=False):
+    """
+    批量预测多个句子的因果标注（单次请求），并按 sid 解析回结构化结果。
+    为保证稳定性，失败时可回退到单句预测。
+    """
+    causal_semantics = get_causal_direction_semantics(causal_direction)
+    if not sentences_data:
+        return {}
+
+    sentence_lines = []
+    for sid, data in sentences_data.items():
+        sentence_text = data.get("sentence_text", "")
+        if sentence_text:
+            sentence_lines.append(f"`{sid}: {sentence_text}`")
+    if not sentence_lines:
+        return {}
+
+    system_prompt = (
+        "You are applying a hypothesis to predict experimental outcomes in an IOI task. Your task is to predict how corrupting a 'Sender Head' will change the attention of a 'Receiver Head'.\n\n"
+        "**--- Key Concepts in the IOI Task (Crucial Background) ---**\n"
+        "To understand the hypothesis, you must know these linguistic roles in the context of a sentence. However, in an IOI task, we may not provide the whole sentence, which means that IO at the end of the sentence may be hidden for prediction. For example, \"John and Mary went to the park. John gave a backpack to Mary.\"\n"
+        "In this sentence:"
+        "- **Subject (S):** The one performing the action. (e.g., 'John' gave the backpack).\n"
+        "- **Indirect Object (IO):** The recipient of the action. Although the token is not provided directly at the end of the sentence, but you can infer from the context.(e.g., 'Mary' received the backpack).\n"
+        "- **Direct Object (DO):** The object being transferred. (e.g., 'a backpack').\n"
+        "The IOI task is about correctly identifying the **Indirect Object (IO)**.\n\n"
+        "--- **Core Task & Causal Rules** ---\n"
+        f"Your task is to predict which token(s) show downstream-attention **{causal_semantics['effect_verb'].upper()}** after corrupting Sender Head {sender_head}, according to the hypothesis.\n\n"
+        f"A downstream-attention **{causal_semantics['label'].upper()}** means the sender head normally **{causal_semantics['normal_effect'].upper()}** downstream attention to those tokens.\n\n"
+        "**MUST FOLLOW RULES:**\n"
+        "- Mark predicted tokens with `<<token>>`.\n"
+        f"- **Exact Count:** You must highlight exactly {top_k} token(s).\n"
+        "- **No Modification:** Do not omit, add, or change any part of the original sentence text.\n"
+        "- **Strict Formatting:** Provide the final marked sentence(s) in a `[PREDICTION]` block.\n\n"
+    )
+    user_prompt = (
+        "--- **Illustrative Example (How to perform the task):** ---\n"
+        "To ensure you understand the method, here is a complete, self-contained example. **DO NOT use the functions or entities from this example for your real task.**\n\n"
+        "**Fictional Scenario:**\n"
+        "- We are studying how a fictional **Sender Head 0.0** affects a fictional **Receiver Head 0.1**.\n"
+        "- **Known function of Receiver Head 0.1:** It is a 'Verb Detector Head'. It tries to pay high attention to verbs in a sentence.\n"
+        f"- **Hypothetical Hypothesis for Sender Head 0.0:** 'Sender Head 0.0 normally {causal_semantics['normal_effect']} a specific class of tokens in the downstream head, so corrupting it makes those tokens show attention {causal_semantics['effect_verb']}.'\n\n"
+        "**Example Sentence:** `ioi_9999: After the game, he was tired but she gave him a water bottle.`\n\n"
+        "**Correct Output for this Fictional Example:**\n"
+        "`ioi_9999: After the game, he was tired but she <<gave>> him a water bottle.`\n"
+        "--- End of Example ---\n\n"
+        "**Your Turn:"
+        f"**Hypothesis:** {hypothesis}\n"
+        "Now, using the **actual hypothesis for Head {sender_head}**, apply it to the following sentence.\n\n"
+        "**Sentences to Analyze (one output line per sentence, keep same sid prefix):**\n"
+        f"{chr(10).join(sentence_lines)}"
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    def _extract_line_by_sid(text, sid):
+        candidate = None
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("`") and line.endswith("`"):
+                line = line[1:-1].strip()
+            if line.startswith(f"{sid}:"):
+                candidate = line
+        return candidate
+
+    attempts = 1 if strict_mode else max_retries
+    for _ in range(attempts):
+        response = await open_router.generate(messages=messages, output_dir=output_dir)
+        response_text = response.text.strip()
+        prediction_matches = re.findall(r"\[PREDICTION\]\s*(.*)", response_text, re.DOTALL | re.IGNORECASE)
+        marked_text = prediction_matches[-1].strip() if prediction_matches else response_text
+        parsed = {}
+        valid = True
+        for sid, data in sentences_data.items():
+            sentence_text = data.get("sentence_text", "")
+            line = _extract_line_by_sid(marked_text, sid)
+            if not line:
+                valid = False
+                break
+            predicted_tokens = _parse_single_marked_tokens(sentence_text, line)
+            if len(predicted_tokens) != top_k:
+                valid = False
+                break
+            parsed[sid] = {"predicted_tokens": predicted_tokens}
+        if valid and len(parsed) == len(sentences_data):
+            return parsed
+
+    if strict_mode:
+        raise ValueError("Strict causal batch mode: invalid batch annotation format from LLM.")
+
+    # 回退到单句预测，避免整批失败导致无结果
+    fallback = {}
+    tasks = []
+    for sid, data in sentences_data.items():
+        tasks.append(predict_for_single_sentence(open_router, hypothesis, sid, data, sender_head, top_k, causal_direction, output_dir))
+    results = await asyncio.gather(*tasks)
+    for sid, item in results:
+        fallback[sid] = item
+    return fallback
+
+async def predict_attention_changes_for_sentences(open_router, hypothesis, sentences_data, sender_head, top_k, causal_direction, output_dir, strict_causal_batch=False):
+    """
+    让LLM根据假设，为一批句子批量预测注意力变化。
+    """
+    print("正在根据假设批量预测句子的注意力变化...")
+    predictions = await predict_for_sentence_batch(
+        open_router, hypothesis, sentences_data, sender_head, top_k, causal_direction, output_dir, strict_mode=strict_causal_batch
+    )
+    return predictions, None, None # 不再返回统一的prompt和raw_response
+
+def evaluate_predictions(predictions, ground_truth_data, sender_head, causal_direction, top_k=1):
+    """
+    【重大重构】根据用户反馈，彻底重构评估函数。
+    1. 修复了重复token被多次标记为正确答案的bug。
+    2. 将Increase/Decrease反馈合并到同一行，减少上下文并增强对比。
+    """
+    total_f1 = 0
+    feedback_details = []
+    ground_truth_details = {}
+    count = 0
+
+    for sid, pred in predictions.items():
+        if sid not in ground_truth_data: continue
+        
+        gt_sentence_data = ground_truth_data[sid]
+        pred_set = set(pred.get('predicted_tokens', []))
+        
+        # --- 1. 【已修正】精确定位真实答案的唯一 suffixed token ---
+        real_diffs = gt_sentence_data['diff_vectors']
+        tokens = gt_sentence_data['tokens']
+        sentence_vectors = [np.array(v) for k, v in real_diffs.items() if k.startswith(f"{sender_head[0]}.{sender_head[1]}->") and v]
+        if not sentence_vectors: continue
+        
+        min_len = min(len(v) for v in sentence_vectors)
+        avg_diff_vector = np.mean([v[:min_len] for v in sentence_vectors], axis=0)
+        
+        original_sentence_text = gt_sentence_data['sentence_text']
+        words, suffixed_map = _get_suffixed_word_map(original_sentence_text)
+        
+        # 将分数与唯一的、带后缀的token绑定
+        suffixed_token_changes = []
+        for i in range(min_len):
+            suffixed_token = suffixed_map.get(i)
+            if suffixed_token:
+                suffixed_token_changes.append((suffixed_token, avg_diff_vector[i]))
+
+        suffixed_token_changes.sort(key=lambda x: x[1], reverse=True)
+        
+        if causal_direction == "increase":
+            real_set = {t for t, _ in suffixed_token_changes[:top_k]}
+        else:
+            real_set = {t for t, _ in suffixed_token_changes[-top_k:]}
+
+        ground_truth_details[sid] = {"direction": causal_direction, "tokens": list(real_set)}
+        
+        f1_single = (2 * len(pred_set.intersection(real_set))) / (len(pred_set) + len(real_set)) if (len(pred_set) + len(real_set)) > 0 else 0
+        total_f1 += f1_single
+        count += 1
+
+        pred_list = sorted(pred_set)
+        real_list = sorted(real_set)
+
+        feedback_details.append(
+            f"Sentence_id: {sid}; "
+            f"Sentence: {original_sentence_text}; "
+            f"Your prediction ({causal_direction}): {pred_list}; "
+            f"Answer ({causal_direction}): {real_list}"
+        )
+
+    avg_f1 = (total_f1 / count) if count > 0 else 0
+    final_feedback = "\n".join(feedback_details)
+    metrics = {
+        "causal_direction": causal_direction,
+        "direction_f1": avg_f1,
+        "causal_f1": avg_f1,
+    }
+    return avg_f1, final_feedback, ground_truth_details, metrics
+
+def _extract_tagged_section(response_text, tag):
+    tag_re = re.compile(
+        rf"(?im)^\s*(?:\d+\s*[.)]\s*)?(?:[-*]\s*)?(?:\*\*\s*)?\[{re.escape(tag)}\]\s*[:：]?(?:\s*\*\*)?\s*"
+    )
+    fallback_tag_re = re.compile(
+        rf"(?i)(?:\*\*\s*)?\[{re.escape(tag)}\]\s*[:：]?(?:\s*\*\*)?\s*"
+    )
+    next_tag_re = re.compile(
+        r"(?im)^\s*(?:\d+\s*[.)]\s*)?(?:[-*]\s*)?(?:\*\*\s*)?\[[A-Z_]+\]\s*[:：]?(?:\s*\*\*)?"
+    )
+    match = tag_re.search(response_text) or fallback_tag_re.search(response_text)
+    if not match:
+        return ""
+    tail = response_text[match.end() :].strip()
+    next_tag = next_tag_re.search(tail)
+    if next_tag:
+        tail = tail[: next_tag.start()].strip()
+    return tail
+
+
+async def _generate_refine_substep(open_router, system_prompt, user_prompt, output_dir):
+    response = await open_router.generate(
+        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+        output_dir=output_dir,
+    )
+    prompt_log = f"---SYSTEM PROMPT---\n{system_prompt}\n\n---USER PROMPT---\n{user_prompt}"
+    return response.text, prompt_log
+
+
+async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, explanation, causal_direction, output_dir, f1_score, ndcg_score, attention_f1_score, causal_feedback=None, attention_feedback=None, optimize_only="dual"):
+    print("按 attention -> causal -> synthesis 三步精炼假设...")
+    causal_semantics = get_causal_direction_semantics(causal_direction)
+
+    causal_f1 = f1_score if f1_score is not None else 0.0
+    attn_f1 = attention_f1_score if attention_f1_score is not None else 0.0
+    if optimize_only == "causal":
+        attention_feedback = None
+        attn_f1 = 0.0
+        composite_score = causal_f1
+    elif optimize_only == "attention":
+        causal_feedback = None
+        causal_f1 = 0.0
+        composite_score = attn_f1
+    else:
+        composite_score = np.sqrt(causal_f1 * attn_f1) if attention_feedback else causal_f1
+
+    print(f"因果F1: {causal_f1:.2f}, 注意力F1: {attn_f1:.2f}, 综合F1分数: {composite_score:.2f}")
+
+    common_system_prompt = (
+        "**--- Key Concepts in the IOI Task (Crucial Background) ---**\n"
+        "To understand the hypothesis, you must know these linguistic roles in the context of a sentence. However, in an IOI task, we may not provide the whole sentence, which means that IO at the end of the sentence may be hidden for prediction. For example, \"John and Mary went to the park. John gave a backpack to Mary.\"\n"
+        "In this sentence:"
+        "- **Subject (S):** The one performing the action. (e.g., 'John' gave the backpack).\n"
+        "- **Indirect Object (IO):** The recipient of the action. Although the token is not provided directly at the end of the sentence, but you can infer from the context.(e.g., 'Mary' received the backpack).\n"
+        "- **Direct Object (DO):** The object being transferred. (e.g., 'a backpack').\n"
+        "You must analyze the discrepancies between predicted and real model behavior to understand how the prior hypothesis mistakenly interprets the head's real function. "
+        "Moreover, you must realize that the fact that an attention head pays close attention to a certain token does not contradict the fact that one of its functions is to suppress the expression of this token in the final output. The attention to this token may have the effect of reminding other heads to block this token. At the same time, the attention head's attention to a certain token is not necessarily related to its influence on the downstream heads."
+        "\nTwo-hop clarification (A→B→C): A is patched into B (intermediate), and the measured change is at C (target). "
+        "This means A affects C *through* B (A changes B's behavior, which in turn changes B's effect on C). "
+        "Path patching here replaces/patches A's activations into B, then measures how C's attention changes. "
+        "Your refined hypothesis must explain how A influences B and how that influence propagates to C, using the downstream-head descriptions when provided."
+    )
+
+    attention_reasoning = ""
+    attention_prompt_log = ""
+    attention_raw_response = ""
+    if attention_feedback and optimize_only != "causal":
+        attention_user_prompt = (
+            f"You are refining a hypothesis for Sender Head {sender_head}.\n"
+            f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
+            "--- PERFORMANCE & FEEDBACK ANALYSIS ---\n"
+            "**Core Metrics:**\n"
+            f"- **Attention F1 Score (What it LOOKS AT): {attn_f1:.2f}**\n"
+            f"(Reference only: Attention NDCG Score: {ndcg_score:.2f})\n\n"
+            "**Feedback Source: Direct Attention Prediction (What the head LOOKS AT)**\n"
+            "This feedback shows how well the hypothesis predicted the head's own Top-K attention targets. Analyze the real patterns carefully and focus only on the attention evidence.\n"
+            f"{attention_feedback}\n\n"
+            "**Your Task:**\n"
+            "- Analyze what the previous hypothesis got right about the head's direct attention targets.\n"
+            "- Identify the main attention-side mistakes or omissions.\n"
+            "- Propose a better attention-side mechanism, using IO / S1 / S2 / clause structure when helpful.\n\n"
+            "**Response Format (Strict):**\n"
+            "1. **[REASONING]:** Start with this tag. Explain what the old hypothesis got right, what it got wrong, and what attention-side mechanism is better supported by the feedback. **The colon is mandatory** (must be `[REASONING]:`).\n"
+        )
+        attention_raw_response, attention_prompt_log = await _generate_refine_substep(
+            open_router, common_system_prompt, attention_user_prompt, output_dir
+        )
+        attention_reasoning = _extract_tagged_section(attention_raw_response, "REASONING") or attention_raw_response.strip()
+
+    causal_reasoning = ""
+    causal_prompt_log = ""
+    causal_raw_response = ""
+    if causal_feedback and optimize_only != "attention":
+        causal_user_prompt = (
+            f"You are refining a hypothesis for Sender Head {sender_head}.\n"
+            f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
+            "--- PERFORMANCE & FEEDBACK ANALYSIS ---\n"
+            "**Core Metrics:**\n"
+            f"- **Causal F1 Score (What it DOES): {causal_f1:.2f}**\n\n"
+            "**Feedback Source: Causal Effect Prediction (What the head DOES)**\n"
+            f"This feedback reveals the head's downstream effect on receiver attention for the **{causal_semantics['label']}** side. "
+            f"In this run, downstream attention {causal_semantics['effect_verb']} after corruption means the sender normally {causal_semantics['normal_effect']} those tokens. "
+            "Analyze the real patterns carefully and focus only on this causal evidence.\n"
+            f"{causal_feedback}\n\n"
+            "**Your Task:**\n"
+            f"- Analyze what the previous hypothesis got right about how the head normally {causal_semantics['normal_effect']} these downstream targets.\n"
+            "- Identify the main causal-side mistakes or omissions.\n"
+            "- Propose a better causal-side mechanism, using IO / S1 / S2 / clause structure when helpful.\n\n"
+            "**Response Format (Strict):**\n"
+            "1. **[REASONING]:** Start with this tag. Explain what the old hypothesis got right, what it got wrong, and what causal-side mechanism is better supported by the feedback. **The colon is mandatory** (must be `[REASONING]:`).\n"
+        )
+        causal_raw_response, causal_prompt_log = await _generate_refine_substep(
+            open_router, common_system_prompt, causal_user_prompt, output_dir
+        )
+        causal_reasoning = _extract_tagged_section(causal_raw_response, "REASONING") or causal_raw_response.strip()
+
+    synthesis_system_prompt = (
+        "You are synthesizing a final mechanistic hypothesis for an IOI attention head.\n"
+        "Combine the old hypothesis with attention-side and causal-side reasoning.\n"
+        "If the two reasonings conflict, reconcile them into one coherent mechanism instead of listing both.\n"
+        "Keep the final hypothesis concise, standalone, and mechanism-focused."
+    )
+    synthesis_user_prompt = (
+        f"Sender Head: {sender_head}\n"
+        f"Previous Hypothesis:\n{old_hypothesis}\n\n"
+        "Attention-side Reasoning:\n"
+        f"{attention_reasoning or 'N/A'}\n\n"
+        "Causal-side Reasoning:\n"
+        f"{causal_reasoning or 'N/A'}\n\n"
+        f"Metrics:\n- Causal F1: {causal_f1:.2f}\n- Attention F1: {attn_f1:.2f}\n- Composite F1: {composite_score:.2f}\n\n"
+        "Task:\n"
+        "- Produce one improved hypothesis.\n"
+        "- Use the two reasonings as evidence, not as text to copy.\n"
+        "- The final hypothesis should describe what this head does in functional terms.\n\n"
+        "Response Format (Strict):\n"
+        "[REASONING]: one concise paragraph explaining how you reconciled the evidence.\n"
+        "[HYPOTHESIS]: one concise standalone paragraph.\n"
+    )
+    synthesis_raw_response, synthesis_prompt_log = await _generate_refine_substep(
+        open_router, synthesis_system_prompt, synthesis_user_prompt, output_dir
+    )
+
+    synthesis_reasoning = _extract_tagged_section(synthesis_raw_response, "REASONING") or "No reasoning found in response."
+    new_hypothesis = _extract_tagged_section(synthesis_raw_response, "HYPOTHESIS") or old_hypothesis
+    reasoning = (
+        "=== ATTENTION REASONING ===\n"
+        f"{attention_reasoning or 'N/A'}\n\n"
+        "=== CAUSAL REASONING ===\n"
+        f"{causal_reasoning or 'N/A'}\n\n"
+        "=== SYNTHESIS REASONING ===\n"
+        f"{synthesis_reasoning}"
+    )
+
+    prompt_log = (
+        "=== ATTENTION STEP ===\n"
+        f"{attention_prompt_log}\n\n"
+        "=== CAUSAL STEP ===\n"
+        f"{causal_prompt_log}\n\n"
+        "=== SYNTHESIS STEP ===\n"
+        f"{synthesis_prompt_log}"
+    )
+    raw_response_log = (
+        "=== ATTENTION STEP ===\n"
+        f"{attention_raw_response}\n\n"
+        "=== CAUSAL STEP ===\n"
+        f"{causal_raw_response}\n\n"
+        "=== SYNTHESIS STEP ===\n"
+        f"{synthesis_raw_response}"
+    )
+
+    print("精炼后的假设:", new_hypothesis)
+    return new_hypothesis, reasoning, prompt_log, raw_response_log
+
+
+def _parse_and_suffix_tokens(original_sentence_text: str, marked_sentence: str, increase_markers: tuple = ("<<", ">>"), decrease_markers: tuple = ("[[", "]]")) -> tuple[list[str], list[str]]:
+    # 1. 预计算全局token计数，用于判断是否需要加后缀
+    original_tokens = word_tokenize(original_sentence_text)
+    global_counts = defaultdict(int)
+    for token in original_tokens:
+        global_counts[normalize_token(token)] += 1
+
+    # 2. 使用NLTK对带标记的句子进行分词
+    # 【修复】预处理句子，确保标记符号与单词分开，避免 Tokenizer 将它们粘连在一起 (如 '<<Lewis>>')
+    processed_marked_sentence = marked_sentence
+    processed_marked_sentence = processed_marked_sentence.replace(increase_markers[0], f" {increase_markers[0]} ")
+    processed_marked_sentence = processed_marked_sentence.replace(increase_markers[1], f" {increase_markers[1]} ")
+    processed_marked_sentence = processed_marked_sentence.replace(decrease_markers[0], f" {decrease_markers[0]} ")
+    processed_marked_sentence = processed_marked_sentence.replace(decrease_markers[1], f" {decrease_markers[1]} ")
+    
+    marked_tokens = word_tokenize(processed_marked_sentence)
+
+    # 3. 初始化状态机和结果列表
+    increase_suffixed, decrease_suffixed = [], []
+    running_counts = defaultdict(int)
+    
+    in_increase = False
+    in_decrease = False
+    last_token = "" # 用于检测连续标记
+
+    # 4. 【已修正】遍历分词后的token列表，使用更清晰的状态机逻辑
+    for token in marked_tokens:
+        # a. 更新状态机
+        
+        # 检查是否是开始标记 (支持单token '<<' 或 双token '<' '<')
+        is_inc_start = (token == increase_markers[0]) or (token == increase_markers[0][0] and last_token == increase_markers[0][0])
+        is_dec_start = (token == decrease_markers[0]) or (token == decrease_markers[0][0] and last_token == decrease_markers[0][0])
+        
+        # 检查是否是结束标记 (支持单token '>>' 或 双token '>' '>')
+        is_inc_end = (token == increase_markers[1]) or (token == increase_markers[1][0] and last_token == increase_markers[1][0])
+        is_dec_end = (token == decrease_markers[1]) or (token == decrease_markers[1][0] and last_token == decrease_markers[1][0])
+
+        if is_inc_start:
+            in_increase = True
+            last_token = token
+            continue 
+        elif is_dec_start:
+            in_decrease = True
+            last_token = token
+            continue
+        elif is_inc_end:
+            in_increase = False
+            last_token = token
+            continue
+        elif is_dec_end:
+            in_decrease = False
+            last_token = token
+            continue
+
+        # b. 如果在标记内部，则处理当前token
+        # 确保当前token不是标记本身
+        # 这里的检查主要是为了防止 NLTK 分词产生的单个 < 或 [ 字符被误认为是内容
+        is_marker_char = token in ['<', '>', '[', ']']
+        if not is_marker_char and (in_increase or in_decrease):
+            if not re.search(r"\w", token):
+                last_token = token
+                continue
+            norm_token = normalize_token(token)
+            running_counts[norm_token] += 1
+            
+            # c. 根据全局计数决定是否添加后缀
+            if global_counts.get(norm_token, 0) > 1:
+                suffixed_token = f"{token.strip()}_{running_counts[norm_token]}"
+            else:
+                suffixed_token = token.strip()
+            
+            # d. 将带后缀的token添加到对应的结果列表
+            if in_increase:
+                increase_suffixed.append(suffixed_token)
+            elif in_decrease:
+                decrease_suffixed.append(suffixed_token)
+        
+        last_token = token
+
+    return increase_suffixed, decrease_suffixed
+
+
+def _parse_single_marked_tokens(original_sentence_text: str, marked_sentence: str, markers: tuple = ("<<", ">>")) -> list[str]:
+    original_tokens = word_tokenize(original_sentence_text)
+    global_counts = defaultdict(int)
+    for token in original_tokens:
+        global_counts[normalize_token(token)] += 1
+
+    processed = marked_sentence.replace(markers[0], f" {markers[0]} ").replace(markers[1], f" {markers[1]} ")
+    marked_tokens = word_tokenize(processed)
+
+    tagged_tokens = []
+    running_counts = defaultdict(int)
+    in_span = False
+    last_token = ""
+    for token in marked_tokens:
+        is_start = (token == markers[0]) or (token == markers[0][0] and last_token == markers[0][0])
+        is_end = (token == markers[1]) or (token == markers[1][0] and last_token == markers[1][0])
+        if is_start:
+            in_span = True
+            last_token = token
+            continue
+        if is_end:
+            in_span = False
+            last_token = token
+            continue
+        if in_span and token not in ['<', '>']:
+            if not re.search(r"\w", token):
+                last_token = token
+                continue
+            norm = normalize_token(token)
+            running_counts[norm] += 1
+            if global_counts.get(norm, 0) > 1:
+                tagged_tokens.append(f"{token.strip()}_{running_counts[norm]}")
+            else:
+                tagged_tokens.append(token.strip())
+        last_token = token
+    return tagged_tokens
+
+
+async def evaluate_single_hypothesis(
+    hypothesis,
+    open_router,
+    validation_dataset,
+    sender_head,
+    top_k_causal,
+    top_k_attention,
+    attention_ground_truth,
+    causal_direction,
+    output_dir,
+    strict_causal_batch=False,
+    eval_batch_size=5,
+):
+
+    print(f"  - 开始评估假设: \"{hypothesis[:80]}...\"")
+    # 在验证集上运行因果预测（分批）
+    val_causal_preds = {}
+    for batch in chunk_dict(validation_dataset, eval_batch_size):
+        batch_preds, _, _ = await predict_attention_changes_for_sentences(
+            open_router, hypothesis, batch, sender_head, top_k_causal, causal_direction, output_dir, strict_causal_batch=strict_causal_batch
+        )
+        val_causal_preds.update(batch_preds)
+    val_f1, _, val_causal_gt, val_causal_metrics = evaluate_predictions(
+        val_causal_preds, validation_dataset, sender_head, causal_direction, top_k=top_k_causal
+    )
+
+    # 在验证集上运行注意力预测
+    val_ndcg = 0.0
+    val_f1_att = 0.0
+    val_att_preds = None
+    val_att_gt = None
+    if attention_ground_truth:
+        val_sids_att = [sid for sid in validation_dataset if sid in attention_ground_truth]
+        if val_sids_att:
+            val_att_preds = {}
+            for i in range(0, len(val_sids_att), eval_batch_size):
+                batch_ids = val_sids_att[i:i + eval_batch_size]
+                val_att_input = {sid: attention_ground_truth[sid] for sid in batch_ids}
+                batch_preds = await predict_top_k_attenders_batch(
+                    open_router, hypothesis, val_att_input, sender_head, top_k_attention, output_dir
+                )
+                val_att_preds.update(batch_preds)
+            val_ndcg, val_f1_att, _ = evaluate_top_k_predictions(val_att_preds, attention_ground_truth, top_k_attention)
+            val_att_gt = {sid: attention_ground_truth[sid] for sid in val_sids_att}
+    
+    print(f"  - 评估完成: Causal F1={val_f1:.2f}, Attn NDCG={val_ndcg:.2f}, Attn F1={val_f1_att:.2f}")
+    
+    details = build_standard_details(
+        sentence_ids=list(validation_dataset.keys()),
+        sentence_source=validation_dataset,
+        causal_preds=val_causal_preds,
+        causal_truth=val_causal_gt,
+        causal_direction=causal_direction,
+        attn_preds=val_att_preds,
+        attn_truth=val_att_gt,
+        top_k_attn=top_k_attention,
+    )
+
+    # 返回该假设的完整验证结果
+    return {
+        "hypothesis": hypothesis,
+        "validation_scores": {
+            "causal_direction": causal_direction,
+            "causal_f1": val_f1,
+            "causal_direction_f1": val_causal_metrics.get("direction_f1", 0.0),
+            "direct_attention_ndcg": val_ndcg,
+            "direct_attention_f1": val_f1_att
+        },
+        "validation_details": details
+    }
+    
+async def main():
+    # 1. 初始化和加载数据
+    args = await parse_arguments()
+    sender_head = (args.layer, args.head)
+    output_dir = args.output_dir
+    optimize_only = args.optimize_only
+    causal_direction = args.causal_direction
+    strict_causal_batch = args.strict_causal_batch
+    validate_every = max(1, int(args.validate_every))
+    validation_sample_size = max(0, int(args.validation_sample_size))
+    test_sample_size = max(0, int(args.test_sample_size))
+    test_all_validations = bool(args.test_all_validations)
+    attention_position = (args.attention_position or "end").lower()
+    receiver_heads = [h.strip() for h in args.receiver_heads.split(",") if h.strip()] if args.receiver_heads else []
+    intermediate_heads = [h.strip() for h in args.intermediate_heads.split(",") if h.strip()] if args.intermediate_heads else []
+    if not args.receiver_descriptions_file:
+        print("错误: 必须提供 --receiver_descriptions_file，未提供时程序将退出。")
+        return
+    try:
+        with open(args.receiver_descriptions_file, "r", encoding="utf-8") as f:
+            receiver_descriptions = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"错误: 无法加载 receiver 描述文件 {args.receiver_descriptions_file}: {e}")
+        return
+    if not isinstance(receiver_descriptions, dict) or not receiver_descriptions:
+        print(f"错误: receiver 描述文件为空或格式无效: {args.receiver_descriptions_file}")
+        return
+ 
+    train_batch_size = 10
+    eval_batch_size = 5
+    
+    epochs = 8
+    
+    top_k_attention = 2
+    top_k_causal = 1
+
+    print(f"Validation cadence: every {validate_every} epoch(s), validation_sample_size={validation_sample_size or 'full'}")
+    print(f"Test sample size: {test_sample_size or 'full'}")
+    print(f"Causal direction: {causal_direction}")
+
+    # --- 加载双份Ground Truth数据 ---
+    # 数据源1：因果效应数据
+    full_causal_dataset_path = args.causal_dataset
+    try:
+        with open(full_causal_dataset_path, "r") as f:
+            full_causal_dataset = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"错误: 无法加载因果数据集 {full_causal_dataset_path}: {e}")
+        return
+
+    # 数据源2：直接注意力分数数据
+    attention_scores_dataset_path = os.path.join(output_dir, "attention_scores_ground_truth.jsonl")
+    attention_ground_truth = {}
+    try:
+        # 【已修正】修改加载方式，从逐行加载JSONL改为一次性加载标准JSON
+        with open(attention_scores_dataset_path, "r") as f:
+            # 直接加载整个文件，因为它是一个JSON列表
+            all_data = json.load(f) 
+            
+            # 遍历加载后的列表来构建字典
+            for data in all_data:
+                if "key" in data and "attention_scores" in data:
+                    sentence_text = data.get("original_sentence", "")
+                    raw_tokens = [item.get("token", "") for item in data["attention_scores"]]
+                    attention_ground_truth[data["key"]] = {
+                        "sentence_text": sentence_text,
+                        "tokens": _suffix_tokens_with_sentence(raw_tokens, sentence_text),
+                        "scores": [item.get("score", 0.0) for item in data["attention_scores"]],
+                    }
+                else:
+                    print(f"警告: 在 {attention_scores_dataset_path} 中发现缺少 'key' 或 'attention_scores' 的条目，已跳过。")
+
+        if not attention_ground_truth:
+             print(f"警告: 从 {attention_scores_dataset_path} 加载了 0 条有效的注意力数据。")
+             attention_ground_truth = None
+        else:
+             print(f"成功加载 {len(attention_ground_truth)} 条直接注意力基准数据。")
+
+    except FileNotFoundError:
+        print(f"警告: 未找到直接注意力基准数据文件 {attention_scores_dataset_path}。\n第一阶段的精炼将被跳过。")
+        attention_ground_truth = None
+    except json.JSONDecodeError as e:
+        print(f"错误: 解析JSON文件 {attention_scores_dataset_path} 时失败: {e}\n第一阶段的精炼将被跳过。")
+        attention_ground_truth = None
+    except Exception as e:
+        print(f"加载 {attention_scores_dataset_path} 时发生未知错误: {e}\n第一阶段的精炼将被跳过。")
+        attention_ground_truth = None
+
+    if attention_ground_truth:
+        summary_file_path = os.path.join(output_dir, "attention_top2_summary.txt")
+        print(f"\n正在生成注意力规律总览文件，将保存至: {summary_file_path}")
+        try:
+            with open(summary_file_path, "w", encoding="utf-8") as f:
+                # 为了保证输出顺序与原始文件一致，我们按句子ID排序
+                sorted_sids = sorted(attention_ground_truth.keys())
+                
+                for sid in sorted_sids:
+                    data = attention_ground_truth[sid]
+                    sentence_text = data.get("sentence_text", "N/A")
+                    tokens = data.get("tokens", [])
+                    scores = data.get("scores", [])
+
+                    if not tokens or not scores:
+                        continue
+
+                    # 将token和分数打包并按分数从高到低排序
+                    all_tokens_with_scores = sorted(zip(tokens, scores), key=lambda x: x[1], reverse=True)
+                    
+                    # 提取Top-2的token
+                    top_1_token = all_tokens_with_scores[0][0] if len(all_tokens_with_scores) > 0 else "N/A"
+                    top_2_token = all_tokens_with_scores[1][0] if len(all_tokens_with_scores) > 1 else "N/A"
+
+                    # 写入格式化的字符串
+                    f.write(f"Sentence ID: {sid}\n")
+                    f.write(f"Sentence: {sentence_text}\n")
+                    f.write(f"Top-1 Token: {top_1_token}\n")
+                    f.write(f"Top-2 Token: {top_2_token}\n")
+                    f.write("-" * 50 + "\n")
+            
+            print("注意力规律总览文件生成成功。")
+        except Exception as e:
+            print(f"错误：生成注意力规律总览文件时失败: {e}")
+            
+    train_dataset, validation_dataset, test_dataset = split_dataset(full_causal_dataset)
+    open_router = initialize_openrouter(model=args.model)
+    print("Using OpenRouter model:", args.model)
+    token_tracker = TokenUsageTracker(os.path.join(output_dir, "raw_api_responses.jsonl"))
+    full_run_log = []
+
+    os.makedirs(output_dir, exist_ok=True)
+    iteration_results_dir = os.path.join(output_dir, "iteration_results")
+    os.makedirs(iteration_results_dir, exist_ok=True)
+
+    # 保存全量因果真值与注意力真值，便于离线检查
+    try:
+        all_causal_gt = build_causal_ground_truth(full_causal_dataset, sender_head, top_k=top_k_causal)
+        with open(os.path.join(output_dir, "causal_ground_truth_all.json"), "w", encoding="utf-8") as f:
+            json.dump(all_causal_gt, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"警告: 无法写入 causal_ground_truth_all.json: {e}")
+
+    if attention_ground_truth:
+        try:
+            all_attention_gt = build_attention_ground_truth(attention_ground_truth, top_k=top_k_attention)
+            with open(os.path.join(output_dir, "attention_ground_truth_all.json"), "w", encoding="utf-8") as f:
+                json.dump(all_attention_gt, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"警告: 无法写入 attention_ground_truth_all.json: {e}")
+    
+    print("生成初始假设...")
+    if intermediate_heads:
+        target_text = ", ".join(receiver_heads) if receiver_heads else "the target heads of interest"
+        downstream_text = f"intermediate heads (B): {', '.join(intermediate_heads)}; target heads (C): {target_text}"
+        hop_clarification = (
+            "Hop type: This run is a TWO-HOP setting (A→B→C) because intermediate heads are provided. "
+            "A (the sender) is patched into B (the intermediate heads), and the change is measured at C (the target heads).\n"
+        )
+    else:
+        downstream_text = ", ".join(receiver_heads) if receiver_heads else "the downstream heads of interest"
+        hop_clarification = (
+            "Hop type: This run is a SINGLE-HOP setting (A→B) because no intermediate heads are provided. "
+            "A (the sender) is patched into B (the downstream receiver heads), and the change is measured at B.\n"
+        )
+
+    intermediate_summary = None
+    target_summary = None
+    if receiver_descriptions:
+        if intermediate_heads:
+            heads_with_desc = [h for h in intermediate_heads if h in receiver_descriptions and receiver_descriptions.get(h)]
+            if len(heads_with_desc) > 1:
+                intermediate_summary = await summarize_head_group(
+                    open_router,
+                    receiver_descriptions,
+                    intermediate_heads,
+                    "intermediate_heads",
+                    output_dir,
+                )
+        if receiver_heads:
+            heads_with_desc = [h for h in receiver_heads if h in receiver_descriptions and receiver_descriptions.get(h)]
+            if len(heads_with_desc) > 1:
+                target_summary = await summarize_head_group(
+                    open_router,
+                    receiver_descriptions,
+                    receiver_heads,
+                    "target_heads",
+                    output_dir,
+                )
+    token_tracker.consume_new("train", "setup_summaries")
+
+    receiver_desc_lines = []
+    if receiver_descriptions:
+        if intermediate_heads:
+            receiver_desc_lines.append("Known behaviors of the intermediate heads (B):")
+            if intermediate_summary:
+                receiver_desc_lines.append(f"- **Heads {', '.join(intermediate_heads)} (summary):** {intermediate_summary}")
+            else:
+                wrote_intermediate = False
+                for head in intermediate_heads:
+                    desc = receiver_descriptions.get(head)
+                    if desc:
+                        receiver_desc_lines.append(f"- **Head {head}**: {desc}")
+                        wrote_intermediate = True
+                if not wrote_intermediate:
+                    receiver_desc_lines.append("- (No cached descriptions for intermediate heads.)")
+
+            receiver_desc_lines.append("Known behaviors of the target heads (C):")
+            if target_summary:
+                receiver_desc_lines.append(f"- **Heads {', '.join(receiver_heads)} (summary):** {target_summary}")
+            else:
+                wrote_targets = False
+                for head in receiver_heads:
+                    desc = receiver_descriptions.get(head)
+                    if desc:
+                        receiver_desc_lines.append(f"- **Head {head}**: {desc}")
+                        wrote_targets = True
+                if not wrote_targets:
+                    receiver_desc_lines.append("- (No cached descriptions for target heads.)")
+        else:
+            receiver_desc_lines.append("Known behaviors of the downstream attention heads:")
+            if target_summary:
+                receiver_desc_lines.append(f"- **Heads {', '.join(receiver_heads)} (summary):** {target_summary}")
+            else:
+                ordered_heads = receiver_heads if receiver_heads else sorted(receiver_descriptions.keys())
+                for head in ordered_heads:
+                    desc = receiver_descriptions.get(head)
+                    if desc:
+                        receiver_desc_lines.append(f"- **Head {head}**: {desc}")
+    receiver_desc_block = "\n".join(receiver_desc_lines)
+
+    if optimize_only == "attention":
+        explanation = f"""
+        Background Context:
+        - {hop_clarification.strip()}
+        - Sender head {sender_head} should be explained using its direct attention behavior at the specified query position.
+        - Downstream heads ({downstream_text}) are provided as task context.
+        {receiver_desc_block}
+
+        Your task is to hypothesize the function of sender head {sender_head} based on direct attention evidence in IOI.
+        """
+    else:
+        explanation = f"""
+        Background Context:
+        - {hop_clarification.strip()}
+        - Sender head {sender_head} is believed to function by influencing downstream heads ({downstream_text}).
+        - These downstream heads attend to indirect-object information; any disruption introduced by {sender_head} will change their attention patterns and therefore the IOI task outcome.
+        {receiver_desc_block}
+
+        Your task is to hypothesize the function of the sender head {sender_head} mainly based on how it causally affects the attention of these downstream heads.
+        """
+    
+    # 采用新的、基于样本的假设生成流程
+    # 1. 按顺序窗口抽取 3 组初始样本，各生成一版初始假设
+    train_cursor = 0
+    initial_hypothesis_candidates = []
+    for candidate_idx in range(1, 4):
+        sampled_sentences, train_cursor = sample_sentences_from_causal_dataset(
+            train_dataset, batch_size=train_batch_size, start_idx=train_cursor
+        )
+
+        causal_examples = []
+        direct_attention_examples = []
+        if optimize_only != "attention":
+            causal_examples = get_causal_effects_for_sampling(sampled_sentences, sender_head, top_k=1)
+        if optimize_only != "causal":
+            direct_attention_examples = get_direct_attention_examples_for_sampling(
+                sampled_sentences, attention_ground_truth, top_k=top_k_attention
+            )
+
+        if optimize_only != "attention" and not causal_examples:
+            print(f"无法为初始候选 {candidate_idx} 的抽样句子计算因果效应，程序终止。")
+            return
+        if optimize_only != "causal" and not direct_attention_examples:
+            print(f"无法为初始候选 {candidate_idx} 的抽样句子提取直接注意力证据，程序终止。")
+            return
+
+        hypothesis_text, hypothesis_prompt = await generate_initial_hypothesis(
+            open_router,
+            sender_head,
+            causal_examples,
+            direct_attention_examples,
+            causal_direction,
+            attention_position,
+            optimize_only,
+            explanation,
+            output_dir,
+        )
+        token_tracker.consume_new("train", f"initial_hypothesis_candidate_{candidate_idx}")
+
+        if not hypothesis_text:
+            print(f"无法生成初始候选 {candidate_idx} 的假设，程序终止。")
+            return
+
+        initial_hypothesis_candidates.append({
+            "candidate_index": candidate_idx,
+            "hypothesis": hypothesis_text,
+            "prompt": hypothesis_prompt,
+            "sampled_sentence_ids": list(sampled_sentences.keys()),
+        })
+
+    validation_history = []
+    validation_results_dir = os.path.join(output_dir, "validation_results")
+    os.makedirs(validation_results_dir, exist_ok=True)
+
+    def persist_validation_artifacts():
+        validation_path = os.path.join(output_dir, "validation_results.json")
+        try:
+            with open(validation_path, "w", encoding="utf-8") as f:
+                json.dump(validation_history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"警告: 无法写入 {validation_path}: {e}")
+
+        for item in validation_history:
+            label = str(item.get("label", "validation")).strip() or "validation"
+            safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label)
+            item_path = os.path.join(validation_results_dir, f"{safe_label}.json")
+            try:
+                with open(item_path, "w", encoding="utf-8") as f:
+                    json.dump(item, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"警告: 无法写入 {item_path}: {e}")
+
+        if validation_history:
+            best = max(
+                validation_history,
+                key=lambda r: r.get("validation_scores", {}).get("composite_score", 0),
+            )
+            best_summary_path = os.path.join(output_dir, "best_hypothesis.json")
+            try:
+                with open(best_summary_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "head": f"{sender_head[0]}.{sender_head[1]}",
+                            "causal_mode": "single",
+                            "causal_direction": causal_direction,
+                            "iteration": best.get("label"),
+                            "best_hypothesis": best.get("hypothesis"),
+                            "validation_scores": best.get("validation_scores"),
+                            "source": "validation_history",
+                        },
+                        f,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+            except Exception as e:
+                print(f"警告: 无法写入 {best_summary_path}: {e}")
+
+    def subset_dataset(dataset, ids):
+        return {sid: dataset[sid] for sid in ids if sid in dataset}
+
+    # 保存初始候选，便于离线检查
+    initial_candidates_path = os.path.join(output_dir, "initial_hypothesis_candidates.json")
+    try:
+        with open(initial_candidates_path, "w", encoding="utf-8") as f:
+            json.dump(initial_hypothesis_candidates, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"警告: 无法写入 {initial_candidates_path}: {e}")
+
+    # 训练开始前先评估 3 个初始候选，选 validation 最好的作为迭代起点
+    init_val_ids_all = [sid for sid in validation_dataset if sid in attention_ground_truth] if attention_ground_truth else list(validation_dataset.keys())
+    if validation_sample_size > 0 and len(init_val_ids_all) > validation_sample_size:
+        init_val_ids = init_val_ids_all[:validation_sample_size]
+    else:
+        init_val_ids = init_val_ids_all
+    init_val_subset = subset_dataset(validation_dataset, init_val_ids)
+    init_candidate_results = []
+    if init_val_subset:
+        for candidate in initial_hypothesis_candidates:
+            candidate_result = await evaluate_single_hypothesis(
+                candidate["hypothesis"],
+                open_router,
+                init_val_subset,
+                sender_head,
+                top_k_causal,
+                top_k_attention,
+                attention_ground_truth,
+                causal_direction,
+                output_dir,
+                strict_causal_batch=strict_causal_batch,
+                eval_batch_size=eval_batch_size,
+            )
+            if candidate_result:
+                scores = candidate_result.get("validation_scores", {})
+                composite = compute_composite_score(
+                    scores.get("causal_f1", 0),
+                    scores.get("direct_attention_f1", 0),
+                    scores.get("direct_attention_ndcg", 0),
+                )
+                candidate_result["label"] = f"validation_epoch_0_candidate_{candidate['candidate_index']}"
+                candidate_result["sentence_ids"] = init_val_ids
+                candidate_result["candidate_index"] = candidate["candidate_index"]
+                candidate_result["sampled_sentence_ids"] = candidate.get("sampled_sentence_ids", [])
+                candidate_result["initial_hypothesis_prompt"] = candidate.get("prompt", "")
+                candidate_result["validation_scores"]["composite_score"] = composite
+                candidate_result["validation_scores"]["composite_f1"] = composite
+                candidate_result["decision"] = "candidate_evaluated"
+                init_candidate_results.append(candidate_result)
+                validation_history.append(candidate_result)
+            token_tracker.consume_new("validation", f"validation_epoch_0_candidate_{candidate['candidate_index']}")
+
+        if init_candidate_results:
+            best_init_candidate = max(
+                init_candidate_results,
+                key=lambda r: r.get("validation_scores", {}).get("composite_score", 0.0),
+            )
+            init_val_result = copy.deepcopy(best_init_candidate)
+            init_val_result["label"] = "validation_epoch_0_initial"
+            init_val_result["decision"] = "selected_as_initial_start"
+            validation_history.append(init_val_result)
+            current_hypothesis = init_val_result.get("hypothesis", "")
+            initial_hypothesis = current_hypothesis
+            initial_hypothesis_prompt = init_val_result.get("initial_hypothesis_prompt", "")
+        else:
+            init_val_result = None
+            current_hypothesis = initial_hypothesis_candidates[0]["hypothesis"]
+            initial_hypothesis = current_hypothesis
+            initial_hypothesis_prompt = initial_hypothesis_candidates[0]["prompt"]
+        persist_validation_artifacts()
+    else:
+        init_val_result = None
+        current_hypothesis = initial_hypothesis_candidates[0]["hypothesis"]
+        initial_hypothesis = current_hypothesis
+        initial_hypothesis_prompt = initial_hypothesis_candidates[0]["prompt"]
+    previous_val_result = init_val_result if init_val_subset else None
+
+    # --- 迭代精炼循环（10 epochs） ---
+    print("\n--- 开始统一的迭代精炼循环 ---")
+    for epoch in range(1, epochs + 1):
+        print(f"\n--- Epoch {epoch}/{epochs} ---")
+        iteration_log = {"epoch": epoch, "hypothesis_before": current_hypothesis}
+
+        # --- 1. 并行预测 ---
+        test_sentences_batch, train_cursor = sample_sentences_from_causal_dataset(
+            train_dataset, batch_size=train_batch_size, start_idx=train_cursor
+        )
+        causal_predictions = {}
+        if optimize_only != "attention":
+            for batch in chunk_dict(test_sentences_batch, 5):
+                batch_preds, _, _ = await predict_attention_changes_for_sentences(
+                    open_router, current_hypothesis, batch, sender_head, top_k_causal, causal_direction, output_dir,
+                    strict_causal_batch=strict_causal_batch
+                )
+                causal_predictions.update(batch_preds)
+        
+        attention_predictions = None
+        if attention_ground_truth and optimize_only != "causal":
+            test_sentences_attention = {sid: data for sid, data in attention_ground_truth.items() if sid in test_sentences_batch}
+            attention_predictions = {}
+            for batch in chunk_dict(test_sentences_attention, 5):
+                batch_preds = await predict_top_k_attenders_batch(
+                    open_router, current_hypothesis, batch, sender_head, top_k_attention, output_dir
+                )
+                attention_predictions.update(batch_preds)
+
+        # --- 2. 并行评估 ---
+        f1_score = 0.0
+        causal_feedback = None
+        causal_ground_truth = {}
+        causal_metrics = {"causal_direction": causal_direction, "direction_f1": 0.0, "causal_f1": 0.0}
+        if optimize_only != "attention":
+            f1_score, causal_feedback, causal_ground_truth, causal_metrics = evaluate_predictions(
+                causal_predictions, train_dataset, sender_head, causal_direction, top_k=top_k_causal
+            )
+        print(f"Epoch {epoch} Causal F1 Score: {f1_score:.2f}")
+        iteration_log["causal_direction"] = causal_direction
+        iteration_log["causal_f1"] = f1_score
+        iteration_log["causal_direction_f1"] = causal_metrics.get("direction_f1", 0.0)
+        iteration_log["causal_feedback"] = causal_feedback
+
+        ndcg_score_val = 0.0
+        f1_score_att = 0.0
+        attention_feedback = None
+        attention_ground_truth_batch = None
+        if attention_ground_truth and attention_predictions:
+            ndcg_score_val, f1_score_att, attention_feedback = evaluate_top_k_predictions(attention_predictions, attention_ground_truth, top_k_attention)
+            print(f"Epoch {epoch} Direct Attention NDCG@{top_k_attention}: {ndcg_score_val:.2f}")
+            print(f"Epoch {epoch} Direct Attention F1: {f1_score_att:.2f}")
+            iteration_log.update({"attention_ndcg": ndcg_score_val, "attention_f1": f1_score_att, "attention_feedback": attention_feedback})
+            attention_ground_truth_batch = test_sentences_attention
+
+        iteration_log["details"] = build_standard_details(
+            sentence_ids=list(test_sentences_batch.keys()),
+            sentence_source=test_sentences_batch,
+            causal_preds=causal_predictions,
+            causal_truth=causal_ground_truth,
+            causal_direction=causal_direction,
+            attn_preds=attention_predictions,
+            attn_truth=attention_ground_truth_batch,
+            top_k_attn=top_k_attention,
+        )
+
+        # --- 4. 统一精炼 ---
+        current_hypothesis, reasoning, prompt, raw_response = await refine_hypothesis_combined(
+            open_router, current_hypothesis, sender_head, explanation, causal_direction, output_dir, 
+            f1_score=f1_score,
+            ndcg_score=ndcg_score_val,
+            attention_f1_score=f1_score_att,
+            causal_feedback=causal_feedback, 
+            attention_feedback=attention_feedback,
+            optimize_only=optimize_only,
+        )
+        token_tracker.consume_new("train", f"epoch_{epoch}")
+        iteration_log.update({
+            "hypothesis_after": current_hypothesis, 
+            "refinement_reasoning": reasoning, 
+            "refinement_prompt": prompt, 
+            "refinement_raw_response": raw_response
+        })
+        iter_path = os.path.join(iteration_results_dir, f"iteration_{epoch}.json")
+        try:
+            with open(iter_path, "w", encoding="utf-8") as f:
+                json.dump(iteration_log, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"警告: 无法写入 {iter_path}: {e}")
+        full_run_log.append(iteration_log)
+
+        # --- 5. 每两轮在验证集上评估；若变差则回退到上一次验证假设 ---
+        if epoch % validate_every == 0:
+            val_ids_all = [sid for sid in validation_dataset if sid in attention_ground_truth] if attention_ground_truth else list(validation_dataset.keys())
+            if validation_sample_size > 0 and len(val_ids_all) > validation_sample_size:
+                val_ids = val_ids_all[:validation_sample_size]
+            else:
+                val_ids = val_ids_all
+            val_subset = subset_dataset(validation_dataset, val_ids)
+            if val_subset:
+                val_result = await evaluate_single_hypothesis(
+                    current_hypothesis, open_router, val_subset, sender_head,
+                    top_k_causal, top_k_attention, attention_ground_truth, causal_direction, output_dir,
+                    strict_causal_batch=strict_causal_batch,
+                    eval_batch_size=eval_batch_size,
+                )
+                if val_result:
+                    scores = val_result.get("validation_scores", {})
+                    composite = compute_composite_score(
+                        scores.get("causal_f1", 0),
+                        scores.get("direct_attention_f1", 0),
+                        scores.get("direct_attention_ndcg", 0),
+                    )
+                    val_result["label"] = f"validation_epoch_{epoch}"
+                    val_result["sentence_ids"] = val_ids
+                    val_result["validation_scores"]["composite_score"] = composite
+                    val_result["validation_scores"]["composite_f1"] = composite
+                    prev_score = float(previous_val_result.get("validation_scores", {}).get("composite_score", 0.0)) if previous_val_result else None
+                    if previous_val_result is not None and composite < prev_score:
+                        rollback_hypothesis = previous_val_result.get("hypothesis", "")
+                        if rollback_hypothesis:
+                            current_hypothesis = rollback_hypothesis
+                        val_result["decision"] = "rollback_to_previous_validation"
+                        val_result["previous_validation_composite_score"] = prev_score
+                        val_result["previous_validation_composite_f1"] = prev_score
+                    else:
+                        val_result["decision"] = "accept_current"
+                        previous_val_result = val_result
+                    validation_history.append(val_result)
+                    persist_validation_artifacts()
+                token_tracker.consume_new("validation", f"validation_epoch_{epoch}")
+
+    # --- 测试阶段：使用最后一次 validation 决策后的假设，在测试集上评估 ---
+    hypothesis_for_test = current_hypothesis
+    selected_validation_last = validation_history[-1] if validation_history else None
+    test_ids_all = [sid for sid in test_dataset if sid in attention_ground_truth] if attention_ground_truth else list(test_dataset.keys())
+    if test_sample_size > 0 and len(test_ids_all) > test_sample_size:
+        test_ids = test_ids_all[:test_sample_size]
+    else:
+        test_ids = test_ids_all
+    test_subset = subset_dataset(test_dataset, test_ids)
+    test_result = None
+    if test_subset:
+        test_result = await evaluate_single_hypothesis(
+            hypothesis_for_test, open_router, test_subset, sender_head,
+            top_k_causal, top_k_attention, attention_ground_truth, causal_direction, output_dir,
+            strict_causal_batch=strict_causal_batch,
+            eval_batch_size=eval_batch_size,
+        )
+        token_tracker.consume_new("test", "test_final")
+        if test_result:
+            scores = test_result.get("validation_scores", {})
+            composite = compute_composite_score(
+                scores.get("causal_f1", 0),
+                scores.get("direct_attention_f1", 0),
+                scores.get("direct_attention_ndcg", 0),
+            )
+            test_result["label"] = "test_final"
+            test_result["sentence_ids"] = test_ids
+            test_result["validation_scores"]["composite_score"] = composite
+            test_result["validation_scores"]["composite_f1"] = composite
+            test_path = os.path.join(output_dir, "test_results.json")
+            with open(test_path, "w") as f:
+                json.dump(test_result, f, indent=2, ensure_ascii=False)
+
+    # 额外保存 initial hypothesis 在 test 集上的结果（若与 final 相同则复用）
+    initial_test_result = None
+    same_as_final = (initial_hypothesis or "").strip() == (hypothesis_for_test or "").strip()
+    if test_subset:
+        if same_as_final:
+            initial_test_result = test_result
+            if isinstance(initial_test_result, dict):
+                initial_test_result = dict(initial_test_result)
+                initial_test_result["label"] = "test_initial"
+                initial_test_result["shared_with_final"] = True
+        else:
+            initial_test_result = await evaluate_single_hypothesis(
+                initial_hypothesis, open_router, test_subset, sender_head,
+                top_k_causal, top_k_attention, attention_ground_truth, causal_direction, output_dir,
+                strict_causal_batch=strict_causal_batch,
+                eval_batch_size=eval_batch_size,
+            )
+            token_tracker.consume_new("test", "test_initial")
+            if initial_test_result:
+                init_scores = initial_test_result.get("validation_scores", {})
+                init_comp = compute_composite_score(
+                    init_scores.get("causal_f1", 0),
+                    init_scores.get("direct_attention_f1", 0),
+                    init_scores.get("direct_attention_ndcg", 0),
+                )
+                initial_test_result["label"] = "test_initial"
+                initial_test_result["sentence_ids"] = test_ids
+                initial_test_result["validation_scores"]["composite_score"] = init_comp
+                initial_test_result["validation_scores"]["composite_f1"] = init_comp
+
+    if initial_test_result:
+        init_test_path = os.path.join(output_dir, "initial_test_results.json")
+        with open(init_test_path, "w", encoding="utf-8") as f:
+            json.dump(initial_test_result, f, ensure_ascii=False, indent=2)
+
+    if test_all_validations and validation_history:
+        all_val_test_results = []
+        for item in validation_history:
+            hyp = item.get("hypothesis", "")
+            label = str(item.get("label", "validation"))
+            if not hyp:
+                continue
+            per_test_result = await evaluate_single_hypothesis(
+                hypothesis=hyp,
+                open_router=open_router,
+                validation_dataset=test_subset,
+                sender_head=sender_head,
+                attention_ground_truth=attention_ground_truth,
+                top_k_causal=top_k_causal,
+                top_k_attention=top_k_attention,
+                causal_direction=causal_direction,
+                output_dir=output_dir,
+                strict_causal_batch=strict_causal_batch,
+                eval_batch_size=eval_batch_size,
+            )
+            if per_test_result:
+                scores = per_test_result.get("validation_scores", {})
+                composite = compute_composite_score(
+                    scores.get("causal_f1", 0),
+                    scores.get("direct_attention_f1", 0),
+                    scores.get("direct_attention_ndcg", 0),
+                )
+                per_test_result["label"] = f"test_from_{label}"
+                per_test_result["sentence_ids"] = test_ids
+                per_test_result["validation_scores"]["composite_score"] = composite
+                per_test_result["validation_scores"]["composite_f1"] = composite
+                all_val_test_results.append(per_test_result)
+        all_val_test_path = os.path.join(output_dir, "test_results_all_validations.json")
+        with open(all_val_test_path, "w", encoding="utf-8") as f:
+            json.dump(all_val_test_results, f, ensure_ascii=False, indent=2)
+
+    best_validation_entry = None
+    if validation_history:
+        best_validation_entry = max(
+            validation_history,
+            key=lambda item: float(item.get("validation_scores", {}).get("composite_score", 0.0)),
+        )
+
+    # --- 日志记录 ---
+    final_log_entry = {
+        "head": f"{sender_head[0]}.{sender_head[1]}",
+        "causal_mode": "single",
+        "causal_direction": causal_direction,
+        "initial_hypothesis_candidates": initial_hypothesis_candidates,
+        "initial_hypothesis_prompt": initial_hypothesis_prompt,
+        "full_run_log": full_run_log,
+        "all_hypotheses_validation_results": validation_history,
+        "best_validation_iteration": best_validation_entry.get("label") if best_validation_entry else None,
+        "best_validation_entry": best_validation_entry,
+        "selected_validation_last": selected_validation_last,
+        "hypothesis_used_for_test": hypothesis_for_test,
+        "initial_hypothesis": initial_hypothesis,
+        "initial_test_results": initial_test_result,
+        "test_results": test_result,
+    }
+    
+    final_log_path = os.path.join(output_dir, "final_result_all_rounds.json")
+    with open(final_log_path, "w") as f:
+        json.dump(final_log_entry, f, indent=2, ensure_ascii=False)
+
+    persist_validation_artifacts()
+
+    token_usage_path = os.path.join(output_dir, "token_usage_summary.json")
+    try:
+        with open(token_usage_path, "w", encoding="utf-8") as f:
+            json.dump(token_tracker.summary(), f, ensure_ascii=False, indent=2)
+        print(f"✅ Saved token usage summary to {token_usage_path}")
+    except Exception as e:
+        print(f"警告: 无法写入 token_usage_summary.json: {e}")
+    
+    print(f"\n所有运行数据和最终的并行验证结果已统一保存至: {final_log_path}")
+
+if __name__ == "__main__":
+    asyncio.run(main())

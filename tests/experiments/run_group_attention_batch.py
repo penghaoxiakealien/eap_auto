@@ -10,7 +10,7 @@ Typical usage (after activating the ``eap-ig`` conda env)::
 
     python tests/experiments/run_group_attention_batch.py \
         --device cuda \
-        --model-name /data31/private/wangziran/eap-ig/gpt2
+        --model-name /home/wangziran/gpt2
 
 All scenario summaries are written under ``tests/results/batch_attention``.
 Each target head gets a consolidated summary plus per-edge JSON exports.

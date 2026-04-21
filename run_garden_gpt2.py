@@ -11,7 +11,7 @@ from typing import List, Tuple, Optional
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
-from transformer_lens import HookedTransformer
+from transformer_lens import HookedTransformer, loading_from_pretrained as loading
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from eap.attribute import attribute
@@ -122,6 +122,34 @@ def parse_args():
     return parser.parse_args()
 
 
+def load_local_hooked_transformer(local_model_dir: str, device: str, dtype: torch.dtype) -> HookedTransformer:
+    tokenizer = AutoTokenizer.from_pretrained(local_model_dir, local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        local_model_dir,
+        local_files_only=True,
+        torch_dtype=dtype,
+    )
+    cfg = loading.get_pretrained_model_config(
+        local_model_dir,
+        device=device,
+        local_files_only=True,
+    )
+    model = HookedTransformer(
+        cfg,
+        tokenizer=tokenizer,
+        move_to_device=False,
+    )
+    state_dict = loading.get_pretrained_state_dict(
+        local_model_dir,
+        cfg,
+        hf_model=hf_model,
+        local_files_only=True,
+    )
+    model.load_and_process_state_dict(state_dict)
+    model.move_model_modules_to_device()
+    return model
+
+
 def main():
     args = parse_args()
     output_dir = args.output_dir.expanduser().resolve()
@@ -136,26 +164,7 @@ def main():
 
     def _load_model(primary: str, local_path: Optional[str]):
         if local_path:
-            tokenizer = AutoTokenizer.from_pretrained(local_path, local_files_only=True)
-            hf_model = AutoModelForCausalLM.from_pretrained(
-                local_path,
-                local_files_only=True,
-                torch_dtype=dtype,
-            )
-            official_name = primary if primary in {"gpt2", "gpt2-small"} else primary
-            if official_name == "gpt2-small":
-                official_name = "gpt2"
-            mdl = HookedTransformer.from_pretrained(
-                official_name,
-                center_writing_weights=False,
-                center_unembed=False,
-                fold_ln=False,
-                device=device,
-                dtype=dtype,
-                tokenizer=tokenizer,
-                hf_model=hf_model,
-                local_files_only=True,
-            )
+            mdl = load_local_hooked_transformer(local_path, device=device, dtype=dtype)
             return mdl, local_path
 
         try:

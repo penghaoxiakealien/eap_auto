@@ -169,15 +169,18 @@ def main() -> None:
 
     kept_edges: List[Dict[str, Any]] = []
     for e in group_graph.get("edges", []):
-        src = e.get("source")
-        dst = e.get("target")
+        src = e.get("source") or e.get("src")
+        dst = e.get("target") or e.get("dst")
         if not isinstance(src, str) or not isinstance(dst, str):
             continue
 
         is_special = src in ("input", "logits") or dst in ("input", "logits")
         if args.edge_scope == "internal" and is_special:
             # keep special edges unchanged
-            kept_edges.append(e)
+            out_e = dict(e)
+            out_e.setdefault("source", src)
+            out_e.setdefault("target", dst)
+            kept_edges.append(out_e)
             continue
 
         w = weights.get((src, dst))
@@ -186,6 +189,8 @@ def main() -> None:
         if abs(w.weight) < args.min_abs_weight:
             continue
         out_e = dict(e)
+        out_e.setdefault("source", src)
+        out_e.setdefault("target", dst)
         out_e["weight"] = w.weight
         out_e["n"] = w.n
         kept_edges.append(out_e)
@@ -209,8 +214,8 @@ def main() -> None:
     if args.drop_isolated:
         deg: DefaultDict[str, int] = defaultdict(int)
         for e in kept_edges:
-            s = e.get("source")
-            t = e.get("target")
+            s = e.get("source") or e.get("src")
+            t = e.get("target") or e.get("dst")
             if isinstance(s, str) and isinstance(t, str):
                 deg[s] += 1
                 deg[t] += 1
@@ -223,8 +228,8 @@ def main() -> None:
         out_graph["edges"] = [
             e
             for e in out_graph.get("edges", [])
-            if (e.get("source") in keep_group_ids or e.get("source") in ("input", "logits"))
-            and (e.get("target") in keep_group_ids or e.get("target") in ("input", "logits"))
+            if ((e.get("source") or e.get("src")) in keep_group_ids or (e.get("source") or e.get("src")) in ("input", "logits"))
+            and ((e.get("target") or e.get("dst")) in keep_group_ids or (e.get("target") or e.get("dst")) in ("input", "logits"))
         ]
 
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
