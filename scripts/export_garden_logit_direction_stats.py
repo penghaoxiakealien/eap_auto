@@ -21,6 +21,12 @@ def main() -> None:
     parser.add_argument("--input-json", type=Path, required=True, help="heads_direct_effect_on_logit_difference.json")
     parser.add_argument("--summary-csv", type=Path, required=True, help="Output summary CSV")
     parser.add_argument("--details-csv", type=Path, help="Optional per-sentence details CSV")
+    parser.add_argument(
+        "--metric",
+        choices=["raw", "normalized"],
+        default="normalized",
+        help="Which delta metric to summarize. Defaults to normalized.",
+    )
     args = parser.parse_args()
 
     data = json.loads(args.input_json.read_text(encoding="utf-8"))
@@ -31,8 +37,9 @@ def main() -> None:
     direction_counts = Counter()
     rows = []
     abs_vals = []
+    metric_key = "normalized_delta_logit_diff" if args.metric == "normalized" else "delta_logit_diff"
     for rec in per_sentence:
-        delta = rec.get("delta_logit_diff")
+        delta = rec.get(metric_key)
         if delta is None:
             continue
         direction = "increase" if float(delta) >= 0 else "decrease"
@@ -44,8 +51,12 @@ def main() -> None:
                 "sentence_id": rec.get("sentence_id", ""),
                 "sentence_text": rec.get("sentence_text", ""),
                 "clean_logit_diff": rec.get("clean_logit_diff", ""),
+                "corrupted_logit_diff": rec.get("corrupted_logit_diff", ""),
                 "patched_logit_diff": rec.get("patched_logit_diff", ""),
-                "delta_logit_diff": delta,
+                "delta_logit_diff": rec.get("delta_logit_diff", ""),
+                "normalized_delta_logit_diff": rec.get("normalized_delta_logit_diff", ""),
+                "selected_metric": args.metric,
+                "selected_delta": delta,
                 "direction": direction,
             }
         )
@@ -61,6 +72,7 @@ def main() -> None:
             "decrease_count": decrease,
             "increase_ratio": (increase / total) if total else "",
             "decrease_ratio": (decrease / total) if total else "",
+            "metric": args.metric,
             "mean_abs_delta": (sum(abs_vals) / len(abs_vals)) if abs_vals else "",
         }
     ]
@@ -74,6 +86,7 @@ def main() -> None:
             "decrease_count",
             "increase_ratio",
             "decrease_ratio",
+            "metric",
             "mean_abs_delta",
         ],
     )
@@ -86,8 +99,12 @@ def main() -> None:
                 "sentence_id",
                 "sentence_text",
                 "clean_logit_diff",
+                "corrupted_logit_diff",
                 "patched_logit_diff",
                 "delta_logit_diff",
+                "normalized_delta_logit_diff",
+                "selected_metric",
+                "selected_delta",
                 "direction",
             ],
         )
@@ -96,7 +113,8 @@ def main() -> None:
     if args.details_csv:
         print(f"Wrote details: {args.details_csv}")
     print(
-        f"{head}: total={total}, decrease={decrease} ({(decrease/total if total else 0):.3f}), "
+        f"{head}: metric={args.metric}, total={total}, "
+        f"decrease={decrease} ({(decrease/total if total else 0):.3f}), "
         f"increase={increase} ({(increase/total if total else 0):.3f})"
     )
 

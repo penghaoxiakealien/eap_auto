@@ -82,7 +82,8 @@ async def parse_arguments():
 def initialize_openrouter(model: str = "gpt-5.2-2025-12-11"):
     """初始化OpenRouter API."""
     # api_key = "sk-Z3pwy4dD8WY2XZlbzch66NP5hQIoFKeU7KvI2XD8bQSyFVGO"
-    api_key = "sk-ssCRXZzlj8qhPNs6Ps2BxTXZQXq97vJvKATpFXdwYV0E0gUO"
+    # api_key = "sk-ssCRXZzlj8qhPNs6Ps2BxTXZQXq97vJvKATpFXdwYV0E0gUO"
+    api_key = "sk-cdENMjpwVIpdd1Iv0auFiHizYdgnWM0ZFKhHN3UBYqKIoqpA"
     return OpenRouter(model=model, api_key=api_key)
 
 def split_dataset(full_dataset, train_split=0.4, validation_split=0.2, seed=42):
@@ -418,62 +419,97 @@ async def generate_hypothesis(
     example_sentence,
     example_activations,
     example_indirect_object,
+    causal_examples,
+    optimize_only,
     output_dir,
     require_reasoning: bool,
 ):
     """生成初始假设"""
-    user_content = "\n".join(
-        f"{sentence}{activations}{io}" for sentence, activations, io in zip(example_sentence, example_activations, example_indirect_object)
-    )
-    print(f"为 layer {layer}, head {head} 生成初始假设...")
-    output_rules = (
-        "Output rules:\n"
-        + (
-            "- Provide reasoning, then a single paragraph hypothesis.\n"
-            if require_reasoning
-            else "- Provide a single paragraph hypothesis.\n"
+    include_causal = optimize_only != "attention"
+    include_attention = optimize_only != "causal"
+    user_content = ""
+    if include_attention:
+        user_content = "\n".join(
+            f"{sentence}{activations}{io}" for sentence, activations, io in zip(example_sentence, example_activations, example_indirect_object)
         )
-        + "- The final paragraph must start with [HYPOTHESIS]: and be a standalone explanation.\n"
+    causal_content = ""
+    if include_causal:
+        lines = []
+        for i, ex in enumerate(causal_examples or [], 1):
+            lines.append(
+                f"**Causal Example {i}:**\n"
+                f"- Sentence: \"{ex.get('sentence_text', '')}\"\n"
+                f"- Ground-truth effect of corrupting head ({layer},{head}) on correct-vs-incorrect logit diff at DISAMB: {ex.get('direction', 'UNKNOWN')}\n"
+            )
+        causal_content = "\n".join(lines)
+    print(f"为 layer {layer}, head {head} 生成初始假设...")
+    task_scope_line = (
+        "You should jointly use direct attention evidence and causal evidence.\n\n"
+        if include_attention and include_causal
+        else "You should focus only on direct attention evidence.\n\n"
+        if include_attention
+        else "You should focus only on causal evidence.\n\n"
+    )
+    attention_guidelines = (
+        "Additionally, you will receive a list of examples in which the disambiguation position has been inserted at the end of the sentence, marked using double curly braces (e.g., {{DISAMB}}). The same disambiguation marker will also be displayed separately after the sentence as a reference.\n\n"
+        "Guidelines:\n"
+        "- You will be given a list of text examples on which special words are selected and between delimiters like <<this>>. These words have high attention score from the token immediately before the disambiguation position quoted with {{ }} of the sentence.\n"
+        "- If a sequence of consecutive tokens is important, it is fully enclosed within the delimiters <<like this>>.\n"
+        "- Each example is followed by a list of important tokens and their scores (between 0 and 1) after 'Activations:', where higher values indicate stronger influence. The total sum of scores will not exceed 1.\n"
+        "- Your job is not to infer the hidden disambiguation token, but to hypothesize what this attention head is doing based on the pattern of important tokens and structural positions.\n"
+        "- Your hypothesis must focus on the relation between the important tokens, their scores, and Garden NP/Z disambiguation at the sentence end.\n\n"
+        if include_attention
+        else ""
+    )
+    causal_guidelines = (
+        "You are also given the head's influence on the correct-vs-incorrect logit difference at the disambiguation position.\n\n"
+        "When analyzing attention heads, please consider their contribution to the model's final prediction. While attention patterns show what a head focuses on, "
+        "logit-direction evidence reveals whether keeping the head helps or hurts the correct Garden disambiguation.\n\n"
+        "When forming your hypothesis, consider:\n"
+        "- How the head's attention pattern affects the model's ability to choose the correct disambiguation token\n"
+        "- In which types of sentence structures this head contributes most\n"
+        "- What relationship exists between attention patterns and causal direction\n"
+        "- Whether the head is more important in specific structural contexts\n\n"
+        if include_causal
+        else ""
+    )
+    hypothesis_constraint = (
+        "- In the [HYPOTHESIS] paragraph, explicitly describe both the attention pattern (what the head attends to) and the causal effect on the task/logit difference.\n"
+        if include_attention and include_causal
+        else "- In the [HYPOTHESIS] paragraph, explicitly describe the attention pattern (what the head attends to) and how this supports Garden NP/Z behavior.\n"
+        if include_attention
+        else "- In the [HYPOTHESIS] paragraph, explicitly describe the head's causal effect on the task/logit difference.\n"
     )
     messages = [
         {
             "role": "system",
             "content": (
-                "You are a careful mechanistic interpretability researcher.\n\n"
-                "Background (Garden NP/Z v-trans):\n"
-                "The model must choose the correct disambiguation token at the end of the sentence (always one of \"was\" or \"for\").\n"
-                "The correct answer is NOT given in the prompt.\n\n"
-                "Key roles (with inline example):\n"
-                "- Subordinator (SUBORD): clause introducer (e.g., As/When/While/After)\n"
-                "- Subject (SUBJ): main clause agent\n"
-                "- Ambiguous Verb (VERB): drives NP/Z ambiguity\n"
-                "- Object NP Head (OBJ_HEAD): head noun of the ambiguous object phrase\n"
-                "- Relative Pronoun / Verb (REL_PRON / REL_VERB): relative clause tokens\n"
-                "- Disambiguation Position: final token (\"was\"/\"for\")\n"
-                "Example:\n"
-                "As(SUBORD) the criminal(SUBJ) shot(VERB) the woman(OBJ_HEAD) who(REL_PRON) told(REL_VERB) bad jokes [was/for](DISAMB)\n\n"
-                "Disambiguation intuition (transitive vs intransitive):\n"
-                "- If the ambiguous verb is transitive and takes an object NP, the continuation tends to be \"for\".\n"
-                "- If the ambiguous verb is intransitive (no object NP), the continuation tends to be \"was\".\n\n"
-                "Attention Evidence:\n"
-                "You will receive examples where the head’s strongest attention targets are marked using <<token>>.\n"
-                "These markers show what the head LOOKS AT, not necessarily what it promotes.\n\n"
+                "You are a meticulous AI researcher conducting an important investigation into patterns found in language. "
+                "The text is based on the Garden Path NP/Z v-trans task, where the model is asked to choose the correct disambiguation token "
+                "(\"was\" or \"for\") at the end of a sentence.\n\n"
+                f"{task_scope_line}"
+                f"{attention_guidelines}"
+                f"{causal_guidelines}"
                 "Important:\n"
                 "- The head may help OR hurt the task; do not assume it is beneficial.\n"
-                "- Do not mention << >> or {{ }} in your final hypothesis.\n\n"
-                f"{output_rules}"
+                "- Do not mention << >> or {{ }} in your final hypothesis.\n"
+                "- The final paragraph must be your hypothesis, beginning with [HYPOTHESIS]:\n"
+                "- The [HYPOTHESIS] should be one single paragraph, clearly and thoroughly articulating the head's behavior.\n\n"
+                "- The hypothesis should describe the dominant functional behavior using precise linguistic, semantic, or structural terminology. Avoid overly abstract or generic phrasing.\n"
+                "- Analyze the examples by grouping them into input categories (e.g., sentence structures, structural positions, or ambiguity types) and explain how the head behaves differently across these types. Base your final hypothesis on this classification-aware reasoning.\n"
+                "- Do not include tokens, examples, scores, or error context in the [HYPOTHESIS] paragraph.\n"
+                "- The hypothesis should sound like a standalone description of the head's role in the model with no concessions or negations.\n"
+                f"{hypothesis_constraint}"
+                "- Ensure the [HYPOTHESIS]: tag includes the colon; do not omit it.\n"
             )
         },
         {
             "role": "user",
             "content": (
                 f"\n{explanation}"
-                f"\n{user_content}"
-                + (
-                    "Please write a full response including a thorough reasoning(do not copy the instruction) and a final [HYPOTHESIS] paragraph."
-                    if require_reasoning
-                    else "Please write a final [HYPOTHESIS] paragraph."
-                )
+                f"\n{user_content if include_attention else ''}"
+                f"\n{causal_content if include_causal else ''}"
+                "\nPlease output only one final [HYPOTHESIS] paragraph."
             ),
         },
     ]
@@ -538,6 +574,25 @@ def get_causal_effects_from_preprocessed(sampled_sentences, preprocessed_causal_
         
     print(f"最终找到 {len(causal_examples)} 个匹配的因果效应示例")
     return causal_examples   
+
+
+def build_direction_causal_examples_from_ids(sentence_ids, preprocessed_attention_data, default_direction, per_sentence_effects=None):
+    """Build Garden terminal causal examples using sentence-level logit-direction truth."""
+    examples = []
+    for sid in sentence_ids:
+        item = preprocessed_attention_data.get(str(sid))
+        if not item:
+            continue
+        direction = default_direction
+        if per_sentence_effects and str(sid) in per_sentence_effects:
+            delta = per_sentence_effects[str(sid)]
+            direction = "increase" if float(delta) >= 0 else "decrease"
+        examples.append({
+            "sentence_id": str(sid),
+            "sentence_text": item.get("sentence_text", ""),
+            "direction": direction,
+        })
+    return examples
 
 async def predict_for_single_sentence_causal(open_router, hypothesis, key, sentence_data, sender_head, output_dir, require_reasoning: bool):
     """为单个句子生成因果方向预测（increase/decrease）"""
@@ -607,6 +662,112 @@ async def predict_for_single_sentence_causal(open_router, hypothesis, key, sente
         "sentence_id": sentence_data.get("sentence_id"),
         "raw_response": response_text
     }
+
+
+async def predict_for_sentence_batch_causal(open_router, hypothesis, sentences_data, sender_head, output_dir, require_reasoning: bool, max_retries=1):
+    """按批预测多个句子的因果方向（increase/decrease），失败时回退到单句。"""
+    if not sentences_data:
+        return {}
+
+    sentence_lines = []
+    for key, data in sentences_data.items():
+        sentence_text = data.get("sentence", "")
+        if sentence_text:
+            sentence_lines.append(f"`{key}: {sentence_text} {{{{DISAMB}}}}`")
+    if not sentence_lines:
+        return {}
+
+    system_prompt = (
+        "You are a meticulous AI researcher applying a hypothesis to predict experimental outcomes in a garden path NP/Z v-trans task. "
+        "Your task is to predict how corrupting a Sender Head will change the logit difference at the disambiguation position.\n\n"
+        "**--- Key Concepts in the Garden Path NP/Z v-trans Task (Crucial Background) ---**\n"
+        "The disambiguation token at the sentence end is always one of: **\"was\"** or **\"for\"**. The correct answer is NOT given in the prompt.\n"
+        "Key positions:\n"
+        "- **Subordinator:** clause introducer (As/While/After/When)\n"
+        "- **SUBJ:** main clause subject\n"
+        "- **VERB:** ambiguous verb\n"
+        "- **OBJ_HEAD:** object NP head\n"
+        "- **REL_PRON / REL_VERB:** relative clause cue and verb\n"
+        "- **Disambiguation Position:** final token choice (was/for)\n\n"
+        "--- **Core Task & Causal Rules** ---\n"
+        f"Predict how corrupting Sender Head {sender_head} changes the logit difference (correct token minus incorrect token) at the disambiguation position.\n\n"
+        "For each sentence choose exactly one direction:\n"
+        "- **INCREASE**: logit difference becomes larger\n"
+        "- **DECREASE**: logit difference becomes smaller\n\n"
+        "**MUST FOLLOW RULES:**\n"
+        + (
+            "- You may think silently, but the output must contain only a single `[PREDICTION]` block with one line per sentence.\n"
+            if require_reasoning
+            else "- Output only a single `[PREDICTION]` block with one line per sentence.\n"
+        )
+        + "- Each line must be in the format `sid: INCREASE` or `sid: DECREASE`.\n"
+    )
+    user_prompt = (
+        f"**Hypothesis:** {hypothesis}\n\n"
+        "**Sentences to Analyze (one output line per sentence):**\n"
+        f"{chr(10).join(sentence_lines)}"
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    def _extract_line_by_sid(text, sid):
+        candidate = None
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("`") and line.endswith("`"):
+                line = line[1:-1].strip()
+            if line.startswith(f"{sid}:"):
+                candidate = line
+        return candidate
+
+    for _ in range(max_retries):
+        response = await open_router.generate(messages=messages, output_dir=output_dir)
+        response_text = response.text.strip()
+        prediction_matches = re.findall(r"\[PREDICTION\]\s*(.*)", response_text, re.DOTALL | re.IGNORECASE)
+        pred_text = prediction_matches[-1].strip() if prediction_matches else response_text
+        parsed = {}
+        valid = True
+        for key, sentence_data in sentences_data.items():
+            line = _extract_line_by_sid(pred_text, key)
+            if not line:
+                valid = False
+                break
+            line_lower = line.lower()
+            if "increase" in line_lower and "decrease" in line_lower:
+                valid = False
+                break
+            if "increase" in line_lower:
+                direction = "increase"
+            elif "decrease" in line_lower:
+                direction = "decrease"
+            else:
+                valid = False
+                break
+            parsed[key] = {
+                "direction": direction,
+                "reasoning": "",
+                "sentence_id": sentence_data.get("sentence_id"),
+                "raw_response": response_text,
+            }
+        if valid and len(parsed) == len(sentences_data):
+            return parsed
+
+    fallback = {}
+    tasks = []
+    for key, data in sentences_data.items():
+        tasks.append(
+            predict_for_single_sentence_causal(
+                open_router, hypothesis, key, data, sender_head, output_dir, require_reasoning
+            )
+        )
+    results = await asyncio.gather(*tasks)
+    for key, item in results:
+        fallback[key] = item
+    return fallback
 
 def _get_suffixed_word_map(original_text):
     """辅助函数：为句子的每个词生成带后缀的映射"""
@@ -694,6 +855,12 @@ def build_sentences_from_ids(sentence_ids, preprocessed_data, prefix="sample"):
     return result
 
 
+def chunk_dict(data_dict, chunk_size):
+    """按固定大小切分字典，保持顺序。"""
+    items = list(data_dict.items())
+    return [dict(items[i:i + chunk_size]) for i in range(0, len(items), chunk_size)]
+
+
 def sample_sentence_ids(preprocessed_data, batch_size, start_idx=0):
     """Deterministically sample sentence ids in order, wrapping around."""
     all_ids = list(preprocessed_data.keys())
@@ -754,8 +921,8 @@ async def predict_causal_effects_for_sentences(
     output_dir,
     require_reasoning: bool,
 ):
-    """让LLM根据假设，为一批句子并行预测因果方向"""
-    print("正在根据假设并行预测每个句子的因果效应...")
+    """让LLM根据假设，为一批句子按每批5句预测因果方向"""
+    print("正在根据假设按每批5句预测因果效应...")
     
     # --- 添加调试输出 ---
     if VERBOSE_DEBUG:
@@ -766,15 +933,17 @@ async def predict_causal_effects_for_sentences(
             print(f"  {key}: {data['sentence']}")
         print("==============================")
     
-    tasks = []
-    for key, data in sentences_data.items():
-        task = predict_for_single_sentence_causal(
-            open_router, hypothesis, key, data, sender_head, output_dir, require_reasoning
+    predictions = {}
+    for batch in chunk_dict(sentences_data, 5):
+        batch_predictions = await predict_for_sentence_batch_causal(
+            open_router,
+            hypothesis,
+            batch,
+            sender_head,
+            output_dir,
+            require_reasoning=require_reasoning,
         )
-        tasks.append(task)
-    
-    results = await asyncio.gather(*tasks)
-    predictions = {key: result_dict for key, result_dict in results}
+        predictions.update(batch_predictions)
     
     # --- 添加调试输出 ---
     if VERBOSE_DEBUG:
@@ -1466,6 +1635,20 @@ async def main():
             example_activations.append("Activations: " + ", ".join([f'("{tok.split("_")[0]}", 1.00)' for tok in top_tokens]))
             example_indirect_object.append("{{DISAMB}}")
 
+        init_causal_examples = build_direction_causal_examples_from_ids(
+            init_ids,
+            preprocessed_attention_data,
+            direction,
+            per_sentence_effects=per_sentence if per_sentence else None,
+        )
+
+        if optimize_only != "attention" and not init_causal_examples:
+            print(f"错误: 初始候选 {candidate_idx} 需要因果示例，但未能构建示例，程序终止。")
+            return
+        if optimize_only != "causal" and not example_sentence:
+            print(f"错误: 初始候选 {candidate_idx} 需要注意力示例，但未能构建示例，程序终止。")
+            return
+
         hypothesis_text = await generate_hypothesis(
             open_router,
             layer,
@@ -1474,6 +1657,8 @@ async def main():
             example_sentence,
             example_activations,
             example_indirect_object,
+            init_causal_examples,
+            optimize_only,
             output_dir,
             require_reasoning=with_reasoning,
         )

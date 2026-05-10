@@ -19,6 +19,7 @@ RECEIVER_DESC_FILES=""
 DATA_DIR_OVERRIDE=""
 OUTPUT_DIR_OVERRIDE=""
 OUTPUT_FAMILY="Middle_Head"
+CAUSAL_DIRECTION=""
 TOP_K=2
 ATTN_BATCH_SIZE=1
 STRICT_ALIGN=0
@@ -35,7 +36,7 @@ TEST_SAMPLE_SIZE=50
 
 usage() {
   cat <<'EOF'
-Usage: run_middle_head_garden.sh [options]
+Usage: run_single_middle_head_garden.sh [options]
   --layer L                 Sender layer
   --head H                  Sender head index
   --receiver-heads LIST     Comma-separated receiver heads
@@ -51,6 +52,7 @@ Usage: run_middle_head_garden.sh [options]
   --data-dir PATH           Override data_source_dir
   --output-dir PATH         Override output dir
   --output-family NAME      hypothesis subdir name (default: Middle_Head)
+  --causal-direction MODE   Required, increase or decrease
   --top-k N                 Top-k tokens for preprocessed_attention_scores (default: 2)
   --attention-batch-size N  Batch size for raw attention (default: 1)
   --strict-attention-align  Convert attention tokens to strict word-level tokens
@@ -85,6 +87,7 @@ while [[ $# -gt 0 ]]; do
     --data-dir) DATA_DIR_OVERRIDE="$2"; shift 2 ;;
     --output-dir) OUTPUT_DIR_OVERRIDE="$2"; shift 2 ;;
     --output-family) OUTPUT_FAMILY="$2"; shift 2 ;;
+    --causal-direction) CAUSAL_DIRECTION="$2"; shift 2 ;;
     --top-k) TOP_K="$2"; shift 2 ;;
     --attention-batch-size) ATTN_BATCH_SIZE="$2"; shift 2 ;;
     --strict-attention-align) STRICT_ALIGN=1; shift 1 ;;
@@ -103,8 +106,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$CAUSAL_DIRECTION" != "increase" && "$CAUSAL_DIRECTION" != "decrease" ]]; then
+  echo "错误: --causal-direction 必须是 increase 或 decrease。" >&2
+  usage
+  exit 1
+fi
+
 REPO_ROOT="/home/wangziran/eap_auto"
-SCRIPT_PATH="$REPO_ROOT/tests/experiments/garden/auto_middle.py"
+SCRIPT_PATH="$REPO_ROOT/tests/experiments/garden/auto_single_middle.py"
 
 if [[ -n "$OUTPUT_DIR_OVERRIDE" ]]; then
   OUTPUT_DIR="$OUTPUT_DIR_OVERRIDE"
@@ -294,7 +303,7 @@ if [ -n "$RECEIVER_DESC_OUTPUT" ]; then
   RECEIVER_DESC_ARG=(--receiver_descriptions_file "$RECEIVER_DESC_OUTPUT")
 fi
 
-echo "=== Step 6: run auto_middle ==="
+echo "=== Step 6: run auto_single_middle (${CAUSAL_DIRECTION}) ==="
 python "$SCRIPT_PATH" \
   --layer "$LAYER" \
   --head "$HEAD" \
@@ -306,6 +315,7 @@ python "$SCRIPT_PATH" \
   --validate-every "$VALIDATE_EVERY" \
   --validation-sample-size "$VALIDATION_SAMPLE_SIZE" \
   --test-sample-size "$TEST_SAMPLE_SIZE" \
+  --causal-direction "$CAUSAL_DIRECTION" \
   --receiver_heads "${TARGET_HEAD:-$RECEIVER_HEADS}" \
   "${RECEIVER_DESC_ARG[@]}"
 
@@ -322,9 +332,9 @@ if [ -f "$TEST_RESULT_FILE" ]; then
     --test_file "$TEST_RESULT_FILE" \
     --output_file "$FINAL_SUMMARY_FILE" \
     --head "$LAYER.$HEAD" \
-    --typename "$OUTPUT_FAMILY"
+    --typename "${OUTPUT_FAMILY}_Single"
 else
   echo "⚠️ 未找到测试结果 $TEST_RESULT_FILE，跳过 final_hypothesis 生成。"
 fi
 
-echo "✅ Garden middle head pipeline finished. Results saved to $OUTPUT_DIR"
+echo "✅ Garden single-direction middle head pipeline finished. Results saved to $OUTPUT_DIR"

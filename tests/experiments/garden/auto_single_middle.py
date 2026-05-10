@@ -97,6 +97,12 @@ async def parse_arguments():
         default="gpt-5.2-2025-12-11",
         help="OpenRouter model name.",
     )
+    parser.add_argument(
+        "--causal-direction",
+        choices=["increase", "decrease"],
+        required=True,
+        help="Single-sided causal direction to optimize and score.",
+    )
     return parser.parse_args()
 
 def format_garden_sid(sid) -> str:
@@ -169,6 +175,24 @@ def extract_hypothesis_text(response_text):
 def normalize_token(token):
     """标准化token用于比较"""
     return token.strip().lower()
+
+
+def get_causal_direction_semantics(causal_direction):
+    if causal_direction == "increase":
+        return {
+            "label": "increase",
+            "effect_verb": "increases",
+            "normal_effect": "suppresses",
+            "prediction_task": "predict which tokens gain downstream attention after corruption",
+            "feedback_name": "increase-side causal effect",
+        }
+    return {
+        "label": "decrease",
+        "effect_verb": "decreases",
+        "normal_effect": "promotes",
+        "prediction_task": "predict which tokens lose downstream attention after corruption",
+        "feedback_name": "decrease-side causal effect",
+    }
 
 def _format_feedback_line(original_text, pred_tokens, real_tokens, markers):
     """
@@ -280,6 +304,7 @@ async def generate_initial_hypothesis(
     sender_head,
     causal_examples,
     direct_attention_examples,
+    causal_direction,
     query_position,
     optimize_only,
     explanation,
@@ -291,13 +316,15 @@ async def generate_initial_hypothesis(
     引导LLM进行归纳推理，而不是解读统计数据。
     """
     print(f"为头 {sender_head} 生成初始假设...")
+    causal_semantics = get_causal_direction_semantics(causal_direction)
     
     examples_str = ""
     for i, ex in enumerate(causal_examples, 1):
+        direction_tokens = ex.get(f"{causal_direction}_tokens", [])
         examples_str += (
             f"**Example {i}:**\n"
             f"- **Sentence:** \"{ex['sentence_text']}\"\n"
-            f"- **Result:** Corrupting the head causes attention to INCREASE on `{ex['increase_tokens']}` and DECREASE on `{ex['decrease_tokens']}`.\n\n"
+            f"- **Result:** Corrupting the sender path causes downstream attention to {causal_semantics['effect_verb'].upper()} on `{direction_tokens}`.\n\n"
         )
 
     direct_attention_str = ""
@@ -352,10 +379,9 @@ async def generate_initial_hypothesis(
             "- This replacement isolates the causal effect of that path.\n\n"
             "What we measure:\n"
             "- We measure how DOWNSTREAM receiver/target heads' attention patterns change after this replacement.\n"
-            "- The reported INCREASE/DECREASE refers to changes in the downstream heads' attention, not the sender head's own attention.\n\n"
+            f"- The reported {causal_semantics['label'].upper()} refers to changes in the downstream heads' attention, not the sender head's own attention.\n\n"
             "Direction interpretation (use this exactly):\n"
-            "- An **INCREASE** in downstream attention to a token implies the sender head normally **SUPPRESSES** the downstream head's attention to that token (its suppression was removed by corruption/patching).\n"
-            "- A **DECREASE** in downstream attention to a token implies the sender head normally **PROMOTES** the downstream head's attention to that token (its promotion was removed by corruption/patching).\n\n"
+            f"- A downstream-attention **{causal_semantics['label'].upper()}** means the sender head normally **{causal_semantics['normal_effect'].upper()}** downstream attention to those tokens.\n\n"
             "Single-hop vs two-hop interpretation:\n"
             "- SINGLE-HOP (A→B): we patch the A→B path and measure the change at B.\n"
             "- TWO-HOP (A→B→C): we patch the A→B path but measure the change at C, i.e., A affects C THROUGH B.\n\n"
@@ -372,8 +398,8 @@ async def generate_initial_hypothesis(
             "**Sample Format (important):**\n"
             "Each sample is a causal observation in this exact form:\n"
             "- Sentence: \"...\"\n"
-            "- Result: Corrupting/patching the sender path causes downstream attention to INCREASE on [...] and DECREASE on [...].\n"
-            "Treat the INCREASE/DECREASE token sets as the primary evidence.\n\n"
+            f"- Result: Corrupting/patching the sender path causes downstream attention to {causal_semantics['effect_verb'].upper()} on [...].\n"
+            f"Treat the {causal_semantics['label'].upper()} token set as the primary evidence.\n\n"
         )
 
     evidence_blocks = ""
@@ -383,7 +409,7 @@ async def generate_initial_hypothesis(
         evidence_blocks += examples_str
 
     main_guidance = (
-        "- Connect what the head likely attends to with its downstream causal impact on Garden disambiguation behavior/logit differences.\n"
+        f"- Connect what the head likely attends to with why it normally {causal_semantics['normal_effect']} downstream attention to those tokens.\n"
         if include_causal
         else "- Focus on the sender head's direct attention pattern and what behavior it likely supports in Garden NP/Z disambiguation.\n"
     )
@@ -922,12 +948,13 @@ async def predict_attention_changes_for_sentences(open_router, hypothesis, sente
         predictions.update(batch_predictions)
     return predictions, None, None # 不再返回统一的prompt和raw_response
 
-def evaluate_predictions(predictions, ground_truth_data, sender_head, top_k=1):
+def evaluate_predictions(predictions, ground_truth_data, sender_head, causal_direction, top_k=1):
     """
     【重大重构】根据用户反馈，彻底重构评估函数。
     1. 修复了重复token被多次标记为正确答案的bug。
     2. 将Increase/Decrease反馈合并到同一行，减少上下文并增强对比。
     """
+    causal_semantics = get_causal_direction_semantics(causal_direction)
     total_f1_increase, total_f1_decrease = 0, 0
     feedback_details = []
     ground_truth_details = {}
@@ -965,7 +992,9 @@ def evaluate_predictions(predictions, ground_truth_data, sender_head, top_k=1):
         real_inc_set = {t for t, s in suffixed_token_changes[:top_k]}
         real_dec_set = {t for t, s in suffixed_token_changes[-top_k:]}
         
-        ground_truth_details[sid] = {"increase": list(real_inc_set), "decrease": list(real_dec_set)}
+        real_set = real_inc_set if causal_direction == "increase" else real_dec_set
+        pred_set = pred_inc_set if causal_direction == "increase" else pred_dec_set
+        ground_truth_details[sid] = {"direction": causal_direction, "tokens": list(real_set)}
         
         # --- 2. 计算F1分数 (逻辑不变) ---
         f1_increase = (2 * len(pred_inc_set.intersection(real_inc_set))) / (len(pred_inc_set) + len(real_inc_set)) if (len(pred_inc_set) + len(real_inc_set)) > 0 else 0
@@ -1002,14 +1031,23 @@ def evaluate_predictions(predictions, ground_truth_data, sender_head, top_k=1):
                 real_words.append(word)
 
         feedback_details.append(
-            f"--- Sentence: {format_garden_sid(sid)} ---\n"
-            f"  [Your Combined Prediction]: {' '.join(pred_words)}\n"
-            f"  [Real Combined Answer]:   {' '.join(real_words)}"
+            f"Sentence_id: {format_garden_sid(sid)}; "
+            f"Sentence: {original_sentence_text}; "
+            f"Your prediction ({causal_semantics['label']}): {sorted(pred_set)}; "
+            f"Answer ({causal_semantics['label']}): {sorted(real_set)}"
         )
 
-    avg_f1 = ((total_f1_increase / count) + (total_f1_decrease / count)) / 2 if count > 0 else 0
-    final_feedback = f"Overall Causal F1 Score for this batch: {avg_f1:.2f}\n\n" + "\n".join(feedback_details)
-    return avg_f1, final_feedback, ground_truth_details
+    if count > 0:
+        avg_f1 = (total_f1_increase / count) if causal_direction == "increase" else (total_f1_decrease / count)
+    else:
+        avg_f1 = 0
+    final_feedback = "\n".join(feedback_details)
+    metrics = {
+        "causal_direction": causal_direction,
+        "direction_f1": avg_f1,
+        "causal_f1": avg_f1,
+    }
+    return avg_f1, final_feedback, ground_truth_details, metrics
 
 def _extract_tagged_section(text: str, tag: str):
     if not text:
@@ -1042,13 +1080,23 @@ async def _generate_refine_substep(open_router, system_prompt, user_prompt, outp
     return response.text, prompt_log
 
 
-async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, explanation, output_dir, f1_score, ndcg_score, attention_f1_score, causal_feedback=None, attention_feedback=None, hop_info=""):
+async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, explanation, causal_direction, output_dir, f1_score, ndcg_score, attention_f1_score, causal_feedback=None, attention_feedback=None, hop_info="", optimize_only="dual"):
     """按 attention -> causal -> synthesis 三步精炼假设。"""
     print("按 attention -> causal -> synthesis 三步精炼假设...")
+    causal_semantics = get_causal_direction_semantics(causal_direction)
 
     causal_f1 = f1_score if f1_score is not None else 0.0
     attn_f1 = attention_f1_score if attention_f1_score is not None else 0.0
-    composite_score = np.sqrt(causal_f1 * attn_f1) if attention_feedback else causal_f1
+    if optimize_only == "causal":
+        attention_feedback = None
+        attn_f1 = 0.0
+        composite_score = causal_f1
+    elif optimize_only == "attention":
+        causal_feedback = None
+        causal_f1 = 0.0
+        composite_score = attn_f1
+    else:
+        composite_score = np.sqrt(causal_f1 * attn_f1) if attention_feedback else causal_f1
 
     print(f"因果F1: {causal_f1:.2f}, 注意力F1: {attn_f1:.2f}, 综合F1分数: {composite_score:.2f}")
 
@@ -1073,7 +1121,7 @@ async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, e
     attention_reasoning = ""
     attention_prompt_log = ""
     attention_raw_response = ""
-    if attention_feedback:
+    if attention_feedback and optimize_only != "causal":
         attention_user_prompt = (
             f"You are refining a hypothesis for Sender Head {sender_head}.\n"
             f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
@@ -1100,7 +1148,7 @@ async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, e
     causal_reasoning = ""
     causal_prompt_log = ""
     causal_raw_response = ""
-    if causal_feedback:
+    if causal_feedback and optimize_only != "attention":
         causal_user_prompt = (
             f"You are refining a hypothesis for Sender Head {sender_head}.\n"
             f"**Previous Hypothesis (Flawed):**\n{old_hypothesis}\n\n"
@@ -1108,16 +1156,14 @@ async def refine_hypothesis_combined(open_router, old_hypothesis, sender_head, e
             "**Core Metrics:**\n"
             f"- **Causal F1 Score (What it DOES): {causal_f1:.2f}**\n\n"
             "**Feedback Source: Causal Effect Prediction (What the head DOES)**\n"
-            "This feedback reveals the head's true downstream function (suppression/promotion). A low score means the hypothesis is wrong about the head's actual effect.\n"
+            f"This feedback reveals the head's downstream effect on receiver attention for the **{causal_semantics['label']}** side. "
+            f"In this run, downstream attention {causal_semantics['effect_verb']} after corruption means the sender normally {causal_semantics['normal_effect']} those tokens. "
+            "Analyze the real patterns carefully and focus only on this causal evidence.\n"
             f"{causal_feedback}\n\n"
             "**Your Task:**\n"
-            "- Analyze the causal-effect errors and trade-offs shown above.\n"
-            "- Analyze what the previous hypothesis got right about the head's causal-side effect.\n"
+            f"- Analyze what the previous hypothesis got right about how the head normally {causal_semantics['normal_effect']} these downstream targets.\n"
             "- Identify the main causal-side mistakes or omissions.\n"
             "- Propose a revised causal-side mechanism that better matches the evidence.\n\n"
-            "Important:\n"
-            "- If the causal feedback consistently supports the current sign of effect, preserve that sign and focus on refining the mechanism rather than reversing the direction.\n"
-            "- Only revise the sign if the feedback repeatedly and clearly contradicts it.\n\n"
             "**Response Format (Strict):**\n"
             "1. **[REASONING]:** Start with this tag. Analyze only the causal evidence, explain what the old hypothesis got right, what it got wrong, and what causal-side mechanism is better supported by the feedback. **The colon is mandatory** (must be `[REASONING]:`).\n"
         )
@@ -1247,7 +1293,7 @@ def _parse_and_suffix_tokens(original_sentence_text: str, marked_sentence: str, 
     return increase_suffixed, decrease_suffixed
 
 
-async def evaluate_single_hypothesis(hypothesis, open_router, validation_dataset, sender_head, top_k_causal, top_k_attention, attention_ground_truth, output_dir, sender_attention_position, receiver_attention_position, hop_info, with_reasoning):
+async def evaluate_single_hypothesis(hypothesis, open_router, validation_dataset, sender_head, top_k_causal, top_k_attention, attention_ground_truth, causal_direction, output_dir, sender_attention_position, receiver_attention_position, hop_info, with_reasoning):
     """
     【新增辅助函数】在验证集上完整评估单个假设，用于并行化。
     """
@@ -1256,7 +1302,7 @@ async def evaluate_single_hypothesis(hypothesis, open_router, validation_dataset
     val_causal_preds, _, _ = await predict_attention_changes_for_sentences(
         open_router, hypothesis, validation_dataset, sender_head, top_k_causal, output_dir, receiver_attention_position, hop_info, with_reasoning
     )
-    val_f1, _, val_causal_gt = evaluate_predictions(val_causal_preds, validation_dataset, sender_head, top_k=top_k_causal)
+    val_f1, _, val_causal_gt, val_causal_metrics = evaluate_predictions(val_causal_preds, validation_dataset, sender_head, causal_direction, top_k=top_k_causal)
 
     # 在验证集上运行注意力预测
     val_ndcg = 0.0
@@ -1283,7 +1329,9 @@ async def evaluate_single_hypothesis(hypothesis, open_router, validation_dataset
     return {
         "hypothesis": hypothesis,
         "validation_scores": {
-            "causal_f1": val_f1, 
+            "causal_direction": causal_direction,
+            "causal_f1": val_f1,
+            "causal_direction_f1": val_causal_metrics.get("direction_f1", 0.0),
             "direct_attention_ndcg": val_ndcg,
             "direct_attention_f1": val_f1_att
         },
@@ -1297,6 +1345,7 @@ async def main():
     args = await parse_arguments()
     with_reasoning = args.with_reasoning
     optimize_only = args.optimize_only
+    causal_direction = args.causal_direction
     validate_every = max(1, int(args.validate_every))
     validation_sample_size = max(0, int(args.validation_sample_size))
     test_sample_size = max(0, int(args.test_sample_size))
@@ -1479,6 +1528,7 @@ async def main():
             top_k_causal,
             top_k_attention,
             attention_ground_truth,
+            causal_direction,
             output_dir,
             sender_attention_position,
             receiver_attention_position,
@@ -1522,6 +1572,7 @@ async def main():
             sender_head,
             causal_examples,
             direct_attention_examples,
+            causal_direction,
             sender_attention_position,
             optimize_only,
             explanation,
@@ -1584,7 +1635,11 @@ async def main():
             causal_predictions, _, _ = await predict_attention_changes_for_sentences(
                 open_router, current_hypothesis, test_sentences_batch, sender_head, top_k_causal, output_dir, receiver_attention_position, hop_info, with_reasoning
             )
-            causal_f1, causal_feedback, causal_ground_truth = evaluate_predictions(causal_predictions, test_sentences_batch, sender_head, top_k=top_k_causal)
+            causal_f1, causal_feedback, causal_ground_truth, causal_metrics = evaluate_predictions(
+                causal_predictions, test_sentences_batch, sender_head, causal_direction, top_k=top_k_causal
+            )
+        else:
+            causal_metrics = {"causal_direction": causal_direction, "direction_f1": 0.0, "causal_f1": 0.0}
 
         attention_predictions = None
         ndcg_score_val = 0.0
@@ -1609,6 +1664,8 @@ async def main():
         iteration_log.update(
             {
                 "causal_f1": causal_f1,
+                "causal_direction": causal_direction,
+                "causal_direction_f1": causal_metrics.get("direction_f1", 0.0),
                 "attention_ndcg": ndcg_score_val,
                 "attention_f1": attention_f1,
                 "causal_feedback": causal_feedback,
@@ -1621,6 +1678,7 @@ async def main():
             current_hypothesis,
             sender_head,
             explanation,
+            causal_direction,
             output_dir,
             f1_score=causal_f1,
             ndcg_score=ndcg_score_val,
@@ -1628,6 +1686,7 @@ async def main():
             causal_feedback=causal_feedback if optimize_only != "attention" else None,
             attention_feedback=attention_feedback if optimize_only != "causal" else None,
             hop_info=hop_info,
+            optimize_only=optimize_only,
         )
         iteration_log.update(
             {
@@ -1646,6 +1705,8 @@ async def main():
                     "hypothesis": current_hypothesis,
                     "scores": {
                         "causal_f1": causal_f1,
+                        "causal_direction": causal_direction,
+                        "causal_direction_f1": causal_metrics.get("direction_f1", 0.0),
                         "attention_f1": attention_f1,
                         "attention_ndcg": ndcg_score_val,
                     },

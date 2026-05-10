@@ -112,10 +112,12 @@ def main() -> None:
     z_filter = lambda name: name.endswith("z")
     with t.no_grad():
         clean_logits, clean_cache = model.run_with_cache(dataset.toks, names_filter=z_filter)
-        _, corrupted_cache = model.run_with_cache(corrupted.toks, names_filter=z_filter)
+        corrupted_logits, corrupted_cache = model.run_with_cache(corrupted.toks, names_filter=z_filter)
 
     clean_logit_diff = dataset.logit_diff(clean_logits, mean=True).item()
     clean_logit_diff_per = dataset.logit_diff(clean_logits, mean=False).detach().cpu().tolist()
+    corrupted_logit_diff = dataset.logit_diff(corrupted_logits, mean=True).item()
+    corrupted_logit_diff_per = dataset.logit_diff(corrupted_logits, mean=False).detach().cpu().tolist()
 
     model.reset_hooks()
     hook_fn = lambda act, hook: patch_or_freeze_head_vectors(
@@ -131,26 +133,41 @@ def main() -> None:
     patched_logit_diff = dataset.logit_diff(patched_logits, mean=True).item()
     patched_logit_diff_per = dataset.logit_diff(patched_logits, mean=False).detach().cpu().tolist()
 
-    delta = patched_logit_diff - clean_logit_diff
+    raw_delta = patched_logit_diff - clean_logit_diff
+    denom = clean_logit_diff - corrupted_logit_diff
+    normalized_delta = raw_delta / denom if abs(denom) > 1e-12 else None
     per_sentence = []
     for idx, sample in enumerate(dataset.samples):
         sentence_id = idx
         sentence_text = sample.clean
         clean_val = clean_logit_diff_per[idx]
+        corrupted_val = corrupted_logit_diff_per[idx]
         patched_val = patched_logit_diff_per[idx]
+        per_denom = clean_val - corrupted_val
+        per_raw_delta = patched_val - clean_val
+        per_normalized_delta = per_raw_delta / per_denom if abs(per_denom) > 1e-12 else None
         per_sentence.append(
             {
                 "sentence_id": sentence_id,
                 "sentence_text": sentence_text,
                 "clean_logit_diff": clean_val,
+                "corrupted_logit_diff": corrupted_val,
                 "patched_logit_diff": patched_val,
-                "delta_logit_diff": patched_val - clean_val,
+                "delta_logit_diff": per_raw_delta,
+                "normalized_delta_logit_diff": per_normalized_delta,
             }
         )
 
     payload = {
-        f"{layer}.{head}": delta,
+        f"{layer}.{head}": raw_delta,
         "per_sentence": per_sentence,
+        "scores": {
+            "clean_logit_diff": clean_logit_diff,
+            "corrupted_logit_diff": corrupted_logit_diff,
+            "patched_logit_diff": patched_logit_diff,
+            "delta_logit_diff": raw_delta,
+            "normalized_delta_logit_diff": normalized_delta,
+        },
         "meta": {
             "head": f"{layer}.{head}",
             "data_path": str(args.data_path),
@@ -162,7 +179,11 @@ def main() -> None:
 
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
     args.output_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
-    print(f"✅ 写入 logit 贡献: {args.output_file} ({layer}.{head}: {delta:.6f})")
+    normalized_display = "nan" if normalized_delta is None else f"{normalized_delta:.6f}"
+    print(
+        f"✅ 写入 logit 贡献: {args.output_file} "
+        f"({layer}.{head}: raw_delta={raw_delta:.6f}, normalized_delta={normalized_display})"
+    )
 
 
 if __name__ == "__main__":
